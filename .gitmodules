@@ -1,0 +1,3 @@
+[submodule "general-vulkan"]
+	path = general-vulkan
+	url = https://github.com/tzn893/general-vulkan.git
