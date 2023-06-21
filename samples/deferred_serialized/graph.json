@@ -1,0 +1,218 @@
+{
+    "resources":
+    [
+        {
+            "name":"back-buffer",
+            "type": "texture2d",
+            "format" : "rgba8",
+            "mip-count" : 1,
+            "array-count" : 1,
+            "screen-scale" : 1
+        }
+        ,
+        {
+            "name" : "depth-buffer",
+            "type": "texture2d",
+            "format" : "d24s8",
+            "mip-count" : 1,
+            "array-count" : 1,
+            "screen-scale" : 1
+        }
+    ],
+    "prototypes":
+    [
+        {
+            "prototype" : "DeferredPass",
+            "type" : "render-pass",
+            "input" : [],
+            "output" : [ 
+                {
+                    "name" : "gbuffer-color",
+                    "layout" : "texture2d",
+                    "format" : "rgba8",
+                    "screen-scale" : 1,
+                    "channel-count" : 1
+                }, 
+                {
+                    "name" : "gbuffer-normal-depth",
+                    "layout" : "texture2d",
+                    "format" : "rgba8",
+                    "screen-scale" : 1,
+                    "channel-count" : 1
+                },
+                {
+                    "name" : "gbuffer-material",
+                    "layout" : "texture2d",                    
+                    "format" : "rgba8",
+                    "screen-scale" : 1,
+                    "channel-count" : 1
+                },
+                {
+                    "name" : "depth-buffer",
+                    "layout" : "texture2d",
+                    "format" : "d24s8",
+                    "screen-scale" : 1,
+                    "channel-count" : 1
+                }
+            ]
+        }
+        ,
+        {
+            "prototype" : "DeferredShading",
+            "type" : "render-pass",
+            "input" : 
+            [
+                {
+                    "name" : "gbuffer-color",
+                    "layout" : "texture2d",
+                    "format" : "rgba8",
+                    "screen-scale" : 1,
+                    "channel-count" : 1
+                }, 
+                {
+                    "name" : "gbuffer-normal-depth",
+                    "layout" : "texture2d",
+                    "format" : "rgba8",
+                    "screen-scale" : 1,
+                    "channel-count" : 1
+                },
+                {
+                    "name" : "gbuffer-material",
+                    "layout" : "texture2d",                    
+                    "format" : "rgba8",
+                    "screen-scale" : 1,
+                    "channel-count" : 1
+                }
+            ],
+            "output" : [ 
+                {
+                    "name" : "color",
+                    "layout" : "texture2d",
+                    "format" : "rgba8",
+                    "screen-scale" : 1,
+                    "channel-count" : 1
+                }
+            ]
+        }
+        ,
+        {
+            "prototype" : "back-buffer-output0",
+            "type" : "resource-output",
+            "input" : 
+            [
+                {
+                    "name" : "color",
+                    "layout" : "texture2d",
+                    "format" : "rgba8",
+                    "screen-scale" : 1,
+                    "channel-count" : 1
+                }
+            ],
+            "output-resource" : "back-buffer"
+        }
+        ,
+        {
+            "prototype" : "depth-buffer-output0",
+            "type" : "resource-output",
+            "input" : 
+            [
+                {
+                    "name" : "depth-buffer",
+                    "layout" : "texture2d",
+                    "format" : "d24s8",
+                    "screen-scale" : 1,
+                    "channel-count" : 1
+                }
+            ],
+            "output-resource" : "depth-buffer"
+        }
+    ],
+    "passes":
+    [
+        {
+            "pass" : "gbuffer",
+            "prototype" : "DeferredPass"
+        },
+        {
+            "pass" : "deferred-shading",
+            "prototype" : "DeferredShading"
+        },
+        {
+            "pass" : "color-out",
+            "prototype" : "back-buffer-output0"
+        },
+        {
+            "pass" : "depth-out",
+            "prototype" : "depth-buffer-output0"
+        }
+    ],
+    "edges":
+    [
+        {
+            "out" : {
+                "pass" : "gbuffer",
+                "param" : "gbuffer-color"
+            },
+            "in" : {
+                "pass" : "deferred-shading",
+                "param" : "gbuffer-color"
+            }
+        },
+        {
+            "out" :
+            {
+                "pass" : "gbuffer",
+                "param" : "gbuffer-normal-depth"
+            },
+            "in" :
+            {
+                "pass" : "deferred-shading",
+                "param" : "gbuffer-normal-depth"
+            }   
+        },
+        {
+            "out" :
+            {
+                "pass" : "gbuffer",
+                "param" : "gbuffer-material"
+            },
+            "in" :
+            {
+                "pass" : "deferred-shading",
+                "param" : "gbuffer-material"
+            }   
+        },
+        {
+            "out" : 
+            {
+                "pass" : "gbuffer",
+                "param" : "depth-buffer"
+            },
+            "in" :
+            {
+                "pass" : "depth-out",
+                "param" : "depth-buffer"
+            },
+            "mip-idx" : 0,
+            "mip-count" : 1,
+            "array-idx" : 0,
+            "array-count" : 1
+        },
+        {
+            "out" :
+            {
+                "pass" : "deferred-shading",
+                "param" : "color"
+            },
+            "in" :
+            {
+                "pass" : "color-out",
+                "param" : "color"
+            },
+            "mip-idx" : 0,
+            "mip-count" : 1,
+            "array-idx" : 0,
+            "array-count" : 1
+        }
+    ]
+}
