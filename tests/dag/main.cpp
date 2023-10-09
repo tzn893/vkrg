@@ -25,6 +25,7 @@ TEST(GraphIteratorTest, GraphIteratorTest0)
 	};
 	vkrg::DirectionalGraph<int> g;
 	ASSERT_TRUE(g.Begin() == g.End());
+	ASSERT_TRUE(g.Begin().Invalid());
 	
 	vkrg::DirectionalGraph<int>::NodeIterator nodes[9];
 	for (uint32_t i = 0; i < _countof(node_vals); i++)
@@ -351,6 +352,127 @@ TEST(GraphSortTest, GraphSortTestFail1)
 		g.AddEdge(nodes[edges[i][0]], nodes[edges[i][1]]);
 	}
 	ASSERT_FALSE(g.Sort());
+}
+
+TEST(GraphSortTest, GraphSortByPrioritySuccess)
+{
+	int node_vals[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
+
+	std::vector<std::vector<int>> edges = {
+		{1, 0},
+		{2, 0},
+		{3, 0},
+		{4, 1},
+		{6, 1},
+		{6, 2},
+		{5, 2},
+		{5, 3},
+		{8, 4},
+		{8, 6},
+		{6, 5},
+		{7, 5},
+		{8, 7}
+	};
+	vkrg::DirectionalGraph<int> g;
+
+	vkrg::DirectionalGraph<int>::NodeIterator nodes[9];
+	for (uint32_t i = 0; i < _countof(node_vals); i++)
+	{
+		nodes[i] = g.AddNode(node_vals[i]);
+	}
+
+	for (uint32_t i = 0; i < edges.size(); i++)
+	{
+		g.AddEdge(nodes[edges[i][0]], nodes[edges[i][1]]);
+		// duplicated edges doesn't effect graphs' result 
+		g.AddEdge(nodes[edges[i][0]], nodes[edges[i][1]]);
+	}
+	ASSERT_TRUE(g.SortByPriority(
+		[](const int& lhs, const int& rhs)
+		{
+			return lhs < rhs;
+		}
+	));
+
+	std::vector<int> expected_result = { 8, 7, 6, 5, 4, 3, 2, 1, 0 };
+	auto iter = g.Begin();
+	for (uint32_t i = 0;i < 9; i++, iter++)
+	{
+		ASSERT_EQ(expected_result[i], *iter);
+	}
+}
+
+TEST(GraphSortTest, GraphSortByPriorityFail)
+{
+	int node_vals[] = { 0, 1, 2, 3 };
+	std::vector<std::vector<int>> edges =
+	{
+		{0, 1},
+		{1, 2},
+		{2, 3},
+		{3, 1}
+	};
+
+	vkrg::DirectionalGraph<int> g;
+
+	vkrg::DirectionalGraph<int>::NodeIterator nodes[9];
+	for (uint32_t i = 0; i < _countof(node_vals); i++)
+	{
+		nodes[i] = g.AddNode(node_vals[i]);
+	}
+
+	for (uint32_t i = 0; i < edges.size(); i++)
+	{
+		g.AddEdge(nodes[edges[i][0]], nodes[edges[i][1]]);
+		// duplicated edges doesn't effect graphs' result 
+		g.AddEdge(nodes[edges[i][0]], nodes[edges[i][1]]);
+	}
+	ASSERT_FALSE(g.SortByPriority(
+		[](const int& lhs, const int& rhs)
+		{
+			return lhs < rhs;
+		}
+	));
+}
+
+TEST(GraphTest, GraphClear)
+{
+	int node_vals[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
+
+	std::vector<std::vector<int>> edges = {
+		{1, 0},
+		{2, 0},
+		{3, 0},
+		{4, 1},
+		{6, 1},
+		{6, 2},
+		{5, 2},
+		{5, 3},
+		{8, 4},
+		{8, 6},
+		{6, 5},
+		{7, 5},
+		{8, 7}
+	};
+	vkrg::DirectionalGraph<int> g;
+
+	vkrg::DirectionalGraph<int>::NodeIterator nodes[9];
+	for (uint32_t i = 0; i < _countof(node_vals); i++)
+	{
+		nodes[i] = g.AddNode(node_vals[i]);
+	}
+
+	for (uint32_t i = 0; i < edges.size(); i++)
+	{
+		g.AddEdge(nodes[edges[i][0]], nodes[edges[i][1]]);
+		// duplicated edges doesn't effect graphs' result 
+		g.AddEdge(nodes[edges[i][0]], nodes[edges[i][1]]);
+	}
+
+	g.Clear();
+
+	ASSERT_TRUE(g.Begin() == g.End());
+	ASSERT_TRUE(g.Begin().Invalid());
 }
 
 int main() {

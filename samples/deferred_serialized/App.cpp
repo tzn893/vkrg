@@ -3,9 +3,7 @@
 
 int main()
 {
-    ptr<RenderGraph> graph = std::make_shared<RenderGraph>();
-    ptr<RenderPass> deferred = RenderPassFactory::CreateRenderPass("DeferredPass", "pass1").value();
+    ptr<RenderGraph> rg = RenderGraph::LoadFromJson("graph.json").value();
 
 
-    deferred->Execute();
 }

@@ -3,20 +3,18 @@
     [
         {
             "name":"back-buffer",
-            "type": "texture2d",
+            "layout": "texture2d",
             "format" : "rgba8",
             "mip-count" : 1,
-            "array-count" : 1,
-            "screen-scale" : 1
+            "array-count" : 1
         }
         ,
         {
             "name" : "depth-buffer",
-            "type": "texture2d",
+            "layout": "texture2d",
             "format" : "d24s8",
             "mip-count" : 1,
-            "array-count" : 1,
-            "screen-scale" : 1
+            "array-count" : 1
         }
     ],
     "prototypes":
@@ -30,28 +28,44 @@
                     "name" : "gbuffer-color",
                     "layout" : "texture2d",
                     "format" : "rgba8",
-                    "screen-scale" : 1,
+                    "usage" : "color",
+                    "extent" :
+                    {
+                        "screen-scale" : 1
+                    },
                     "channel-count" : 1
                 }, 
                 {
                     "name" : "gbuffer-normal-depth",
                     "layout" : "texture2d",
                     "format" : "rgba8",
-                    "screen-scale" : 1,
+                    "usage" : "color",
+                    "extent" :
+                    {
+                        "screen-scale" : 1
+                    },
                     "channel-count" : 1
                 },
                 {
                     "name" : "gbuffer-material",
                     "layout" : "texture2d",                    
                     "format" : "rgba8",
-                    "screen-scale" : 1,
+                    "usage" : "color",
+                    "extent" :
+                    {
+                        "screen-scale" : 1
+                    },
                     "channel-count" : 1
                 },
                 {
-                    "name" : "depth-buffer",
+                    "name"   : "depth-buffer",
                     "layout" : "texture2d",
                     "format" : "d24s8",
-                    "screen-scale" : 1,
+                    "usage"  : "depth",
+                    "extent" :
+                    {
+                        "screen-scale" : 1
+                    },
                     "channel-count" : 1
                 }
             ]
@@ -63,24 +77,24 @@
             "input" : 
             [
                 {
-                    "name" : "gbuffer-color",
+                    "name"   : "gbuffer-color",
                     "layout" : "texture2d",
                     "format" : "rgba8",
-                    "screen-scale" : 1,
+                    "usage"  : "sampled",
                     "channel-count" : 1
                 }, 
                 {
-                    "name" : "gbuffer-normal-depth",
+                    "name"   : "gbuffer-normal-depth",
                     "layout" : "texture2d",
                     "format" : "rgba8",
-                    "screen-scale" : 1,
+                    "usage"  : "sampled",
                     "channel-count" : 1
                 },
                 {
                     "name" : "gbuffer-material",
                     "layout" : "texture2d",                    
                     "format" : "rgba8",
-                    "screen-scale" : 1,
+                    "usage"  : "sampled",
                     "channel-count" : 1
                 }
             ],
@@ -89,42 +103,52 @@
                     "name" : "color",
                     "layout" : "texture2d",
                     "format" : "rgba8",
-                    "screen-scale" : 1,
+                    "usage"  : "color",
+                    "extent" :
+                    {
+                        "screen-scale" : 1
+                    },
                     "channel-count" : 1
                 }
             ]
         }
         ,
         {
-            "prototype" : "back-buffer-output0",
-            "type" : "resource-output",
+            "!comment" : "resource output pass and input pass will be generated automatically, user don't have to add extra code",
+            "prototype" : "back-buffer-input_0_1_0_1",
+            "type" : "resource-input",
             "input" : 
             [
                 {
-                    "name" : "color",
+                    "name" : "back-buffer",
                     "layout" : "texture2d",
                     "format" : "rgba8",
-                    "screen-scale" : 1,
-                    "channel-count" : 1
+                    "mip-idx" : 0,
+                    "mip-count" : 1,
+                    "array-idx" : 0,
+                    "array-count" : 1
                 }
             ],
-            "output-resource" : "back-buffer"
+            "resource" : "back-buffer"
         }
         ,
         {
-            "prototype" : "depth-buffer-output0",
-            "type" : "resource-output",
+            "!comment" : "resource output pass and input pass will be generated automatically, user don't have to add extra code",
+            "prototype" : "depth-buffer-input_0_1_0_1",
+            "type" : "resource-input",
             "input" : 
             [
                 {
                     "name" : "depth-buffer",
                     "layout" : "texture2d",
                     "format" : "d24s8",
-                    "screen-scale" : 1,
-                    "channel-count" : 1
+                    "mip-idx" : 0,
+                    "mip-count" : 1,
+                    "array-idx" : 0,
+                    "array-count" : 1
                 }
             ],
-            "output-resource" : "depth-buffer"
+            "resource" : "depth-buffer"
         }
     ],
     "passes":
@@ -138,12 +162,12 @@
             "prototype" : "DeferredShading"
         },
         {
-            "pass" : "color-out",
-            "prototype" : "back-buffer-output0"
+            "pass" : "back-buffer-output_0_1_0_1-0",
+            "prototype" : "back-buffer-output_0_1_0_1"
         },
         {
-            "pass" : "depth-out",
-            "prototype" : "depth-buffer-output0"
+            "pass" : "depth-buffer-output_0_1_0_1-0",
+            "prototype" : "depth-buffer-output_0_1_0_1"
         }
     ],
     "edges":
@@ -190,13 +214,9 @@
             },
             "in" :
             {
-                "pass" : "depth-out",
+                "pass" : "depth-buffer-output0-0",
                 "param" : "depth-buffer"
-            },
-            "mip-idx" : 0,
-            "mip-count" : 1,
-            "array-idx" : 0,
-            "array-count" : 1
+            }
         },
         {
             "out" :
@@ -206,13 +226,9 @@
             },
             "in" :
             {
-                "pass" : "color-out",
-                "param" : "color"
-            },
-            "mip-idx" : 0,
-            "mip-count" : 1,
-            "array-idx" : 0,
-            "array-count" : 1
+                "pass" : "back-buffer-output0-0t",
+                "param" : "back-buffer"
+            }
         }
     ]
 }

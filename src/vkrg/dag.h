@@ -106,6 +106,77 @@ namespace vkrg
 			return true;
 		}
 
+
+		bool		 SortByPriority(std::function<bool(const T& lhs, const T& rhs)> _cmp)
+		{
+			auto cmp = [&](uint32_t lhs, uint32_t rhs)
+			{
+				uint32_t idx_lhs = m_idToIdx[lhs];
+				uint32_t idx_rhs = m_idToIdx[rhs];
+
+				return _cmp(m_nodes[idx_lhs].val, m_nodes[idx_rhs].val);
+			};
+
+			std::priority_queue<uint32_t, std::vector<uint32_t>, decltype(cmp)> next_nodes(cmp);
+			std::vector<uint32_t> degrees(m_nodeCount);
+
+			for (uint32_t i = 0; i < m_nodeCount; i++)
+			{
+				auto& adj = m_adjInList[i];
+				if (adj.empty())
+				{
+					next_nodes.push(i);
+				}
+				degrees[i] = adj.size();
+			}
+
+			// cycle in graph
+			if (next_nodes.empty())
+			{
+				return false;
+			}
+
+			uint32_t idx = 0;
+			std::vector<uint32_t> new_id_to_idx(m_nodeCount);
+
+			while (!next_nodes.empty())
+			{
+				uint32_t id = next_nodes.top();
+				next_nodes.pop();
+				new_id_to_idx[id] = idx++;
+
+				auto& adj = m_adjOutList[id];
+				for (auto adj_id : adj)
+				{
+					degrees[adj_id]--;
+					if (degrees[adj_id] == 0)
+					{
+						next_nodes.push(adj_id);
+					}
+				}
+			}
+
+			// cycle in graph
+			if (idx != m_nodeCount)
+			{
+				return false;
+			}
+
+			std::vector<Node>	new_node_list(m_nodeCount + 1);
+			for (uint32_t id = 0; id < m_nodeCount; id++)
+			{
+				uint32_t old_idx = m_idToIdx[id];
+				uint32_t new_idx = new_id_to_idx[id];
+				new_node_list[new_idx] = m_nodes[old_idx];
+			}
+			new_node_list[m_nodeCount] = Node{ T(), invalid_id };
+
+			m_nodes = new_node_list;
+			m_idToIdx = new_id_to_idx;
+
+			return true;
+		}
+
 		/// <summary>
 		/// return node count in the graph
 		/// </summary>
@@ -350,6 +421,12 @@ namespace vkrg
 				return p_id == begin;
 			}
 
+			NodeIterator CaseToNode()
+			{
+				vkrg_assert(p_id != end);
+				return NodeIterator(graph, *p_id);
+			}
+
 		private:
 			uint32_t* p_id;
 			uint32_t* begin;
@@ -434,6 +511,18 @@ namespace vkrg
 			m_nodeCount = m_nodeCount + 1;
 
 			return NodeIterator(this, n.id);
+		}
+
+		/// <summary>
+		/// clear all added nodes and edges from graph
+		/// </summary>
+		void Clear()
+		{
+			m_nodes.clear();
+			m_idToIdx.clear();
+			m_adjOutList.clear();
+			m_adjInList.clear();
+			m_nodeCount = 0;
 		}
 
 	private:
