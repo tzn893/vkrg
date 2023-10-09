@@ -1,26 +1,7 @@
 {
-    "resources":
+    "passes" :
     [
         {
-            "name":"back-buffer",
-            "layout": "texture2d",
-            "format" : "rgba8",
-            "mip-count" : 1,
-            "array-count" : 1
-        }
-        ,
-        {
-            "name" : "depth-buffer",
-            "layout": "texture2d",
-            "format" : "d24s8",
-            "mip-count" : 1,
-            "array-count" : 1
-        }
-    ],
-    "prototypes":
-    [
-        {
-            "prototype" : "DeferredPass",
             "type" : "render-pass",
             "input" : [],
             "output" : [ 
@@ -111,63 +92,6 @@
                     "channel-count" : 1
                 }
             ]
-        }
-        ,
-        {
-            "!comment" : "resource output pass and input pass will be generated automatically, user don't have to add extra code",
-            "prototype" : "back-buffer-input_0_1_0_1",
-            "type" : "resource-input",
-            "input" : 
-            [
-                {
-                    "name" : "back-buffer",
-                    "layout" : "texture2d",
-                    "format" : "rgba8",
-                    "mip-idx" : 0,
-                    "mip-count" : 1,
-                    "array-idx" : 0,
-                    "array-count" : 1
-                }
-            ],
-            "resource" : "back-buffer"
-        }
-        ,
-        {
-            "!comment" : "resource output pass and input pass will be generated automatically, user don't have to add extra code",
-            "prototype" : "depth-buffer-input_0_1_0_1",
-            "type" : "resource-input",
-            "input" : 
-            [
-                {
-                    "name" : "depth-buffer",
-                    "layout" : "texture2d",
-                    "format" : "d24s8",
-                    "mip-idx" : 0,
-                    "mip-count" : 1,
-                    "array-idx" : 0,
-                    "array-count" : 1
-                }
-            ],
-            "resource" : "depth-buffer"
-        }
-    ],
-    "passes":
-    [
-        {
-            "pass" : "gbuffer",
-            "prototype" : "DeferredPass"
-        },
-        {
-            "pass" : "deferred-shading",
-            "prototype" : "DeferredShading"
-        },
-        {
-            "pass" : "back-buffer-output_0_1_0_1-0",
-            "prototype" : "back-buffer-output_0_1_0_1"
-        },
-        {
-            "pass" : "depth-buffer-output_0_1_0_1-0",
-            "prototype" : "depth-buffer-output_0_1_0_1"
         }
     ],
     "edges":
