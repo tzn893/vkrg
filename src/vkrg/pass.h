@@ -1,110 +1,135 @@
 #pragma once
 #include "vkrg/common.h"
-#include "vkrg/prototypes.h"
+#include "vkrg/resource.h"
 
 namespace vkrg
 {
-	class GraphPass
+	
+	class RenderGraph;
+	struct ResourceHandle;
+	class RenderPass;
+
+	struct RenderPassAttachmentOperationState
+	{
+		VkAttachmentLoadOp  load;
+		VkAttachmentStoreOp store;
+		VkAttachmentLoadOp  stencilLoad;
+		VkAttachmentStoreOp stencilStore;
+	};
+
+	struct RenderPassAttachment
+	{
+		enum Type
+		{
+			ImageColorOutput,
+			ImageDepthOutput,
+			ImageColorInput,
+
+			ImageStorageInput,
+			ImageStorageOutput,
+
+			BufferStorageInput,
+			BufferStorageOutput,
+			BufferInput
+		} type;
+
+		uint32_t idx;
+		union
+		{
+			ImageSlice imageRange;
+			BufferSlice bufferRange;
+		} range;
+		RenderPass* targetPass;
+
+		bool WriteToResource() const;
+		bool ReadFromResource() const;
+
+		bool IsImage() const;
+		bool IsBuffer() const;
+	};
+
+	class RenderPassInterface;
+
+	enum class RenderPassType
+	{
+		Graphics,
+		Compute
+	};
+
+	class RenderPass
 	{
 	public:
-		GraphPass(const std::string& name);
+		RenderPass(RenderGraph* graph, const char* name, RenderPassType type);
 
-		virtual VKRG_RENDER_PASS_TYPE GetType() = 0;
+		opt<RenderPassAttachment> AddImageColorOutput(const char* name, ImageSlice range);
+		opt<RenderPassAttachment> AddImageDepthOutput(const char* name, ImageSlice range);
+		opt<RenderPassAttachment> AddImageColorInput(const char* name, ImageSlice range);
+		
+		opt<RenderPassAttachment> AddImageStorageInput(const char* name, ImageSlice range);
+		opt<RenderPassAttachment> AddImageStorageOutput(const char* name, ImageSlice range);
 
-		virtual const char* GetPrototypeName() = 0;
+		opt<RenderPassAttachment> AddBufferStorageInput(const char* name, BufferSlice range);
+		opt<RenderPassAttachment> AddBufferStorageOutput(const char* name, BufferSlice range);
+		opt<RenderPassAttachment> AddBufferInput(const char* name, BufferSlice range);
 
-		const char* GetName()
-		{
-			return name.c_str();
-		}
+		void					  AttachInterface(ptr<RenderPassInterface> inter);
+		
+		ResourceInfo			  GetAttachmentInfo(const RenderPassAttachment& idx);
+		void					  GetAttachmentOperationState(const RenderPassAttachment& idx, RenderPassAttachmentOperationState& state);
+		VkImageLayout			  GetAttachmentExpectedState(const RenderPassAttachment& idx);
+		bool					  RequireClearColor(const RenderPassAttachment& idx);
+		void					  GetClearColor(const RenderPassAttachment& idx, VkClearValue& clearValue);
 
-		bool IsResourcePass()
-		{
-			auto type = GetType();
-			return type == VKRG_RP_TYPE_RESOURCE_INPUT || type == VKRG_RP_TYPE_RESOURCE_OUTPUT ||
-				type == VKRG_RP_TYPE_RESOURCE_IN_OUT;
-		}
+		bool					  ValidationCheck(std::string& msg);
 
-		bool IsExecutablePass()
-		{
-			auto type = GetType();
-			return type == VKRG_RP_TYPE_COMPUTE_PASS || type == VKRG_RP_TYPE_RENDER_PASS;
-		}
+		const char*				  GetName();
+
+		const std::vector<ResourceHandle>& GetAttachedResourceHandles();
+		const std::vector<RenderPassAttachment>& GetAttachments();
+
+		RenderPassType GetType();
 
 	private:
 		std::string name;
+
+		RenderGraph* m_Graph;
+		ptr<RenderPassInterface> m_RenderPassInterface;
+
+		std::vector<RenderPassAttachment> m_Attachments;
+		std::vector<ResourceHandle>		  m_AttachmentResourceHandle;
+		RenderPassType m_RenderPassType;
 	};
 
-
-	class ExecutablePass : public GraphPass
+	class RenderPassInterface
 	{
 	public:
-		ExecutablePass(const std::string& name);
+		RenderPassInterface(RenderPass* renderPass)
+			:m_TargetPass(renderPass)
+		{}
 
-		virtual void GeneratePrototypeInfo(ExecutablePassPrototypeInfoCollector& collector) = 0;
+		// called when compiling graph
+		virtual bool OnValidationCheck(std::string& msg) { return true; }
 
-		virtual void Execute() = 0;
+		virtual void GetClearValue(uint32_t attachment, VkClearValue& value) = 0;
+
+		virtual void GetAttachmentStoreLoadOperation(uint32_t attachment, VkAttachmentLoadOp& loadOp, VkAttachmentStoreOp& storeOp,
+			VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp) {}
+
+		virtual VkImageLayout GetAttachmentExpectedState(uint32_t attachment) = 0;
+
+		virtual void OnRender() = 0;
+
+		virtual RenderPassType ExpectedType() = 0;
+
+	protected:
+		RenderPass* m_TargetPass;
 	};
 
-
-	class ResourcePass : public GraphPass
+	template<typename RPIType,typename ...Args>
+	void CreateRenderPassInterface(RenderPass* rp, Args... args)
 	{
-	public:
-		ResourcePass(const std::string& name, ResourceSlice slice, ResourcePassPrototypeInfo& info);
-
-		VKRG_RENDER_PASS_TYPE GetType() { return m_info.type; }
-
-		const char*			  GetResourceName();
-
-		const char*			  GetPrototypeName();
-		
-
-	private:
-		ResourcePassPrototypeInfo m_info;
-		ResourceSlice m_slice;
-	};
-
-	template<typename T>
-	struct ExecutablePassReflectionPrototypeName
-	{
-		constexpr static const char* name = "unknown";
-	};
-
-	using ExecutablePassPassPrototypeCallback = std::function<ptr<ExecutablePass>(const std::string&)>;
-
-	struct ExecutablePassPassFactory
-	{
-		static opt<ptr<ExecutablePass>> CreateGraphPass(const std::string& prototype, const std::string& name);
-
-		static void RegisterPrototypeFunction(const std::string& name,ExecutablePassPassPrototypeCallback callback);
-
-		template<typename TPass>
-		static void RegisterPrototype(ExecutablePassPassPrototypeCallback callback)
-		{
-			static_assert(std::is_base_of<ExecutablePass, TPass>::value, "registered render pass must be derived from RenderPass class");
-			RegisterPrototypeFunction(ExecutablePassReflectionPrototypeName<TPass>::name, callback);
-		}
-	};
-
-	template<typename TPass>
-	struct ExecutablePassCallbackRegister
-	{
-		ExecutablePassCallbackRegister(ExecutablePassPassPrototypeCallback callback)
-		{
-			ExecutablePassPassFactory::RegisterPrototype<TPass>(callback);
-		}
-	};
-
-
-#define REGISTER_EXECUTABLE_PASS_CREATE(TPass) \
-vkrg::ptr<vkrg::ExecutablePass> Create##TPass##ExePass(const std::string& name) {return std::make_shared<TPass>(name);}\
-static vkrg::ExecutablePassCallbackRegister<TPass> _render_pass_callback_##TPass##_register(Create##TPass##ExePass);\
-const char* TPass::GetPrototypeName() {return ExecutablePassReflectionPrototypeName<TPass>::name;}
-
-#define REGISTER_EXECUTABLE_PASS_PROTOTYPE(TPass) template<>\
-	struct vkrg::ExecutablePassReflectionPrototypeName<TPass>\
-	{\
-		constexpr static const char* name = ""#TPass;\
-	};
-
+		static_assert(std::is_base_of_v<RenderPassInterface, RPType>, "RPType should be derived from render pass interface");
+		auto rpi = std::make_shared<RPType>(rp, args...);
+		rp->AttachInterface(rpi);
+	}
 }

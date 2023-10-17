@@ -1,28 +1,75 @@
 #include "DeferredPass.h"
 
-REGISTER_EXECUTABLE_PASS_CREATE(DeferredPass);
 
-DeferredPass::DeferredPass(const std::string& name): ExecutablePass(name)
+DeferredPass::DeferredPass(RenderPass* targetPass, RenderPassAttachment normalDepth, RenderPassAttachment color, RenderPassAttachment material, RenderPassAttachment depthStencil)
+:
+	RenderPassInterface(targetPass), normalDepth(normalDepth), color(color),material(material), depthStencil(depthStencil)
+{}
+
+void DeferredPass::GetClearValue(uint32_t attachment, VkClearValue& value)
+{
+	if (attachment == depthStencil.idx)
+	{
+		value.depthStencil.depth = 1;
+		value.depthStencil.stencil = 0;
+	}
+	else
+	{
+		value.color = { 0, 0, 0, 1 };
+	}
+}
+
+void DeferredPass::OnRender()
 {
 
 }
 
-void DeferredPass::GeneratePrototypeInfo(ExecutablePassPrototypeInfoCollector& collector)
+bool DeferredPass::OnValidationCheck(std::string& msg)
 {
-	collector.SetType(VKRG_RP_TYPE_RENDER_PASS);
+	if (depthStencil.type != RenderPassAttachment::ImageDepthOutput)
+	{
+		msg = "invalid depth stencil attachment for deferred render pass";
+		return false;
+	}
+	
+	if (!CheckAttachment(normalDepth, "normalDepth", msg))
+	{
+		return false;
+	}
+	if (!CheckAttachment(color, "color", msg))
+	{
+		return false;
+	}
+	if (!CheckAttachment(material, "material", msg))
+	{
+		return false;
+	}
+	if (!CheckAttachment(position, "position", msg))
+	{
+		return false;
+	}
 
-	m_gbufferColor = collector.OutputScaleByScreen("gbuffer-color", VKRG_FORMAT_RGBA8, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-	m_gbufferNormalDepth = collector.OutputScaleByScreen("gbuffer-normal-depth", VKRG_FORMAT_RGBA8, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-	m_gbufferMaterial = collector.OutputScaleByScreen("gbuffer-material", VKRG_FORMAT_RGBA8, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-	m_depthBuffer = collector.OutputScaleByScreen("depth-buffer", VKRG_FORMAT_D24S8, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+	return true;
 }
 
-void DeferredPass::Execute()
+bool DeferredPass::CheckAttachment(RenderPassAttachment attachment, std::string attachment_name, std::string& msg)
 {
-	printf("execute deferred render pass %s\n", GetName());
-}
 
-VKRG_RENDER_PASS_TYPE DeferredPass::GetType()
-{
-	return VKRG_RP_TYPE_RENDER_PASS;
+	if (attachment.targetPass != m_TargetPass)
+	{
+		msg = std::string("invalid attachment ") + attachment_name + " deferred render pass interface must be binded to the same render pass as this attachment's";
+		return false;
+	}
+	if (attachment.type != RenderPassAttachment::ImageColorOutput)
+	{
+		msg = std::string("invalid ") + attachment_name + " attachment for deferred render pass";
+		return false;
+	}
+	if (m_TargetPass->GetAttachmentInfo(attachment).format != VK_FORMAT_R8G8B8A8_UNORM)
+	{
+		msg = std::string("invalid format for ") + attachment_name +" attachment : expected VK_FORMAT_R8G8B8A8_UNORM";
+		return false;
+	}
+
+	return true;
 }

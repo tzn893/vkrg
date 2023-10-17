@@ -1,13 +1,14 @@
 #pragma once
 #include <vkrg/common.h>
 #include <queue>
+#include <unordered_set>
 
 namespace vkrg
 {
 	/// <summary>
 	/// A simple directional acyclic graph implementation.
-	/// This class is designed to be as simple as possible 
-	/// and contains minimal functions for a render graph implementation
+	/// This class is designed to be as simple as possible.
+	/// It contains minimal functions for a render graph implementation
 	/// </summary>
 	/// <typeparam name="T"> the element's type for nodes</typeparam>
 	template<typename T>
@@ -238,6 +239,16 @@ namespace vkrg
 				return const_cast<NodeIterator<T>*>(this)->operator*();
 			}
 
+			T* operator->()
+			{
+				return &graph->m_nodes[graph->FindCurrentIndex(id)].val;
+			}
+
+			const T* operator->() const
+			{
+				return const_cast<NodeIterator<T>*>(this)->operator->();
+			}
+
 			NodeIterator& operator++()
 			{
 				uint32_t idx = graph->FindCurrentIndex(id);
@@ -268,6 +279,16 @@ namespace vkrg
 				return this->operator--();
 			}
 
+			bool		 operator<(const NodeIterator& iter) const
+			{
+				return graph->FindCurrentIndex(id) < graph->FindCurrentIndex(iter.id);
+			}
+
+			bool		 operator>(const NodeIterator& iter) const
+			{
+				return !this->operator<(iter);
+			}
+
 			bool operator==(const NodeIterator& rhs) const
 			{
 				return rhs.graph == graph && rhs.id == id;
@@ -278,23 +299,33 @@ namespace vkrg
 				return !this->operator==(lhs);
 			}
 
-			uint32_t GetId()
+			int32_t operator-(const NodeIterator& other) const
+			{
+				return FindCurrentIndex(id) - FindCurrentIndex(other.id);
+			}
+
+			int32_t DistanceFromBegin() const
+			{
+				return this->operator-(graph->Begin());
+			}
+
+			uint32_t GetId() const
 			{
 				return id;
 			}
 
-			bool Invalid()
+			bool Invalid() const
 			{
 				return id == invalid_id;
 			}
 
-			uint32_t GetInDegree()
+			uint32_t GetInDegree() const
 			{
 				vkrg_assert(!Invalid());
 				return graph->m_adjInList[id].size();
 			}
 
-			uint32_t GetOutDegree()
+			uint32_t GetOutDegree() const
 			{
 				vkrg_assert(!Invalid());
 				return graph->m_adjOutList[id].size();
@@ -511,6 +542,43 @@ namespace vkrg
 			m_nodeCount = m_nodeCount + 1;
 
 			return NodeIterator(this, n.id);
+		}
+
+		/// <summary>
+		/// return wether a visiter start from 'from' node reach the 'to' node
+		/// </summary>
+		/// <param name="from">node visiter start</param>
+		/// <param name="to">node visiter end</param>
+		/// <returns>wether this visiter could reach</returns>
+		bool  CanReach(const NodeIterator& from, const NodeIterator& to)
+		{
+			vkrg_assert(from.graph == this);
+			vkrg_assert(to.graph == this);
+
+			std::unordered_set<uint32_t> visited;
+			return __CanReachRecursive(from, to, visited);
+		}
+
+		bool __CanReachRecursive(const NodeIterator& from, const NodeIterator& to, std::unordered_set<uint32_t>& visited)
+		{
+			visited.insert(from.GetId());
+			if (from == to) return true;
+
+			NodeAdjucentIterator outFrom = IterateAdjucentOut(from);
+
+			while (!outFrom.IsEnd())
+			{
+				if (!visited.count(outFrom.GetId()))
+				{
+					if (__CanReachRecursive(outFrom.CaseToNode(), to, visited))
+					{
+						return true;
+					}
+				}
+
+				outFrom++;
+			}
+			return false;
 		}
 
 		/// <summary>

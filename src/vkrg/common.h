@@ -23,4 +23,4 @@ namespace vkrg
 
 #define vkrg_assert(expr) if(!(expr)) {__debugbreak();exit(-1);}
 
-#define vkrg_fequal(a, b) abs((a) - (b)) < 1e-4
+#define vkrg_fequal(a, b) (((a) - (b)) == 0)

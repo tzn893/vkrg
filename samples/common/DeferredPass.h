@@ -2,24 +2,24 @@
 #include "vkrg/pass.h"
 using namespace vkrg;
 
-class DeferredPass : public ExecutablePass
+class DeferredPass : public RenderPassInterface
 {
 public:
-	DeferredPass(const std::string& name);
+	DeferredPass(RenderPass* targetPass, RenderPassAttachment normalDepth, RenderPassAttachment color, 
+		RenderPassAttachment material, RenderPassAttachment depthStencil, RenderPassAttachment position);
 
-	void GeneratePrototypeInfo(ExecutablePassPrototypeInfoCollector& collector) override;
+	virtual void GetClearValue(uint32_t attachment, VkClearValue& value) override;
 
-	void Execute() override;
+	virtual void OnRender() override;
 
-	const char* GetPrototypeName() override;
+	virtual bool OnValidationCheck(std::string& msg) override;
 
-	VKRG_RENDER_PASS_TYPE GetType() override;
-	
 private:
-	uint32_t m_gbufferColor;
-	uint32_t m_gbufferNormalDepth;
-	uint32_t m_gbufferMaterial;
-	uint32_t m_depthBuffer;
-};
+	bool CheckAttachment(RenderPassAttachment attachment,std::string attachment_name, std::string& msg);
 
-REGISTER_EXECUTABLE_PASS_PROTOTYPE(DeferredPass);
+	RenderPassAttachment normalDepth;
+	RenderPassAttachment color;
+	RenderPassAttachment material;
+	RenderPassAttachment position;
+	RenderPassAttachment depthStencil;
+};
