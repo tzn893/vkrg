@@ -2,23 +2,31 @@
 #include "vkrg/pass.h"
 using namespace vkrg;
 
-class DeferredShading : public ExecutablePass
+class DeferredShading : public RenderPassInterface
 {
 public:
-	DeferredShading(const std::string& name);
+	DeferredShading(RenderPass* targetPass, RenderPassAttachment normal, RenderPassAttachment color,
+		RenderPassAttachment material, RenderPassAttachment color_output, RenderPassAttachment depth);
 
-	void GeneratePrototypeInfo(ExecutablePassPrototypeInfoCollector& collector) override;
+	virtual void GetClearValue(uint32_t attachment, VkClearValue& value) {}
 
-	void Execute() override;
+	virtual VkImageLayout GetAttachmentExpectedState(uint32_t attachment) override;
 
-	const char* GetPrototypeName() override;
+	virtual void GetAttachmentStoreLoadOperation(uint32_t attachment, VkAttachmentLoadOp& loadOp, VkAttachmentStoreOp& storeOp,
+		VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp) override;
 
-	VKRG_RENDER_PASS_TYPE GetType() override;
-private:
-	uint32_t m_gbufferColor;
-	uint32_t m_gbufferNormalDepth;
-	uint32_t m_gbufferMaterial;
-	uint32_t m_depthBuffer;
+	virtual RenderPassType ExpectedType() override { return RenderPassType::Graphics; }
+
+	virtual bool OnValidationCheck(std::string& msg) override;
+	
+protected:
+	bool CheckAttachment(RenderPassAttachment attachment, std::string attachment_name, std::string& msg);
+
+	RenderPassAttachment normal;
+	RenderPassAttachment color;
+	RenderPassAttachment material;
+	RenderPassAttachment color_output;
+	RenderPassAttachment depth;
+
 };
 
-REGISTER_EXECUTABLE_PASS_PROTOTYPE(DeferredShading);

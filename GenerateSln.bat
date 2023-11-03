@@ -1,0 +1,1 @@
+cmake -DKTX_FEATURE_TESTS=Off -B build .

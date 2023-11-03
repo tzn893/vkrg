@@ -301,7 +301,7 @@ namespace vkrg
 
 			int32_t operator-(const NodeIterator& other) const
 			{
-				return FindCurrentIndex(id) - FindCurrentIndex(other.id);
+				return graph->FindCurrentIndex(id) - graph->FindCurrentIndex(other.id);
 			}
 
 			int32_t DistanceFromBegin() const

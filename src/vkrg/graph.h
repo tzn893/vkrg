@@ -31,6 +31,16 @@ namespace vkrg
 
 	struct RenderGraphCompileOptions
 	{
+		RenderGraphCompileOptions()
+		{
+			flightFrameCount = 3;
+			style = RenderGraphRenderPassStyle::OneByOne;
+			addAutomaticTransferUsageFlag = false;
+			disableFrameOnFlight = false;
+			screenWidth = 0;
+			screenHeight = 0;
+		}
+
 		uint32_t				   flightFrameCount = 3;
 		RenderGraphRenderPassStyle style;
 		// transfer src/dst usage flag will be added to all resources automatically
@@ -38,6 +48,8 @@ namespace vkrg
 		bool					   addAutomaticTransferUsageFlag;
 
 		uint32_t				   screenWidth, screenHeight;
+
+		bool					   disableFrameOnFlight;
 	};
 
 
@@ -65,7 +77,6 @@ namespace vkrg
 	struct RenderGraphDeviceContext
 	{
 		ptr<gvk::Context> ctx;
-		ptr<gvk::DescriptorAllocator> allocator;
 	};
 
 	class RenderGraphScope 
@@ -123,10 +134,27 @@ namespace vkrg
 		uint32_t	 m_FlightFrameCount;
 	};
 
+	struct RenderGraphBarrier
+	{
+		VkPipelineStageFlagBits srcStage;
+		VkPipelineStageFlagBits dstStage;
+
+		std::vector<VkImageMemoryBarrier> imageBarriers[4];
+		std::vector<VkBufferMemoryBarrier> bufferBarriers[4];
+		struct Handle
+		{
+			uint32_t idx;
+			bool external;
+		};
+		std::vector<Handle>	imageBarrierHandles;
+		std::vector<Handle> bufferBarrierHandles;
+	};
+
 
 	class RenderGraph
 	{
 		friend class RenderGraphDataFrame;
+		friend class RenderPassRuntimeContext;
 	public:
 		RenderGraph();
 
@@ -137,7 +165,7 @@ namespace vkrg
 		opt<RenderPassHandle> GetGraphRenderPass(uint32_t idx);
 
 		opt<ResourceHandle>	  AddGraphResource(const char* name, ResourceInfo info, bool external, VkImageLayout expectedFinalLayout = VK_IMAGE_LAYOUT_UNDEFINED);
-		opt<RenderPassHandle> AddGraphRenderPass(const char* name, RenderPassType type);
+		opt<RenderPassHandle> AddGraphRenderPass(const char* name, RenderPassType type, RenderPassExtension expectedExt = RenderPassExtension());
 
 		tpl<RenderGraphCompileState, std::string> Compile(RenderGraphCompileOptions options, RenderGraphDeviceContext ctx);
 
@@ -147,7 +175,8 @@ namespace vkrg
 
 		void				  OnResize(uint32_t width, uint32_t height);
 
-		tpl<RenderGraphRuntimeState, std::string>	Execute();
+		tpl<RenderGraphRuntimeState, std::string>	Execute(uint32_t targetFrameIdx, VkCommandBuffer mainCmdBuffer);
+		tpl<gvk::ptr<gvk::RenderPass>, uint32_t>    GetCompiledRenderPassAndSubpass(RenderPassHandle handle);
 
 		RenderGraphDataFrame  GetExternalDataFrame();
 
@@ -167,9 +196,17 @@ namespace vkrg
 		RenderGraphCompileState AssignPhysicalResources(std::string& msg);
 		RenderGraphCompileState ResolveDependenciesAndCreateRenderPasses(std::string& msg);
 
-		void					ResizePhysicalResources();
-		void					UpdateDirtyFrameBuffers();
+		GvkImageCreateInfo		CreateImageCreateInfo(ResourceInfo info);
 
+		void					ResizePhysicalResources();
+		void					UpdateDirtyViews();
+		void					UpdateDirtyFrameBuffersAndBarriers();
+		void					ResetResourceBindingDirtyFlag();
+		void					GenerateCommands(VkCommandBuffer cmd, uint32_t frameIdx);
+
+
+		void					InitializeRPFrameBufferTable();
+		void					InitializeRenderPassViewTable();
 		void					ClearCompileCache();
 		void					PostCompile();
 
@@ -202,6 +239,7 @@ namespace vkrg
 			uint32_t idx;
 			std::vector<DAGNode> renderPasses;
 			bool     canBeMerged;
+			RenderPassExtension expectedExtension;
 		};
 
 		using DAGMergedNode = DirectionalGraph<MergedRenderPass>::NodeIterator;
@@ -218,6 +256,8 @@ namespace vkrg
 		// this function should be used for external resources
 		// because physical resource might be merged
 		DAGMergedNode FindLastAccessedNodeForResource(uint32_t logicalResourceIdx);
+
+		tpl<uint32_t, uint32_t, uint32_t> GetExpectedExtension(ResourceInfo::Extension ext, ResourceExtensionType type);
 
 		struct ResourceAssignment
 		{
@@ -248,15 +288,11 @@ namespace vkrg
 			std::string	   name;
 		};
 
-		struct BufferResource
-		{
-			ResourceInfo info;
-		};
-
 		std::vector<ResourceAssignment>  m_LogicalResourceAssignmentTable;
 		std::vector<PhysicalResource> m_PhysicalResources;
 		std::vector<ExternalResource> m_ExternalResources;
 
+		
 		RenderGraphDeviceContext m_vulkanContext;
 		struct RenderGraphPassInfo
 		{
@@ -266,33 +302,16 @@ namespace vkrg
 			// for compute passes
 			struct Compute
 			{
-				struct Handle
-				{
-					uint32_t idx;
-					bool	 isBuffer;
-
-					Handle()
-					{
-						idx = invalidIdx;
-						isBuffer = false;
-					}
-
-					bool Invalid()
-					{
-						return idx == invalidIdx;
-					}
-				};
-
-				// map logical resource to which barrier it is mapped
-				std::vector<Handle> physicalResourceBarrierTable;
-				// map external resource to which barrier it is mapped
-				std::vector<Handle> externalResourceBarrierTable;
-
-				std::vector<VkImageMemoryBarrier> passImageBarriers;
-				std::vector<VkBufferMemoryBarrier> passBufferBarriers;
+				std::vector<RenderGraphBarrier> barriers;
+				uint32_t targetRenderPass;
 			} compute;
 
-			using FBAttachment = ResourceAssignment;
+			struct FBAttachment
+			{
+				VkImageViewType      viewType;
+				ResourceAssignment assign;
+				ImageSlice		   subresource;
+			};
 			
 			// table records witch frame buffer does the logical resource attachmented to 
 			// for rernder passes
@@ -303,10 +322,14 @@ namespace vkrg
 
 				std::vector<FBAttachment> fbAttachmentIdx;
 				std::vector<VkClearValue> fbClearValues;
+				
+				RenderPassExtension expectedExtension;
 			} render;
-		};
-		std::vector<RenderGraphPassInfo> m_vulkanPassInfo;
 
+		};
+		std::vector<RenderGraphPassInfo> m_vulkanMergedPassInfo;
+
+		bool SubresourceCompability(RenderPassAttachment& lhs, RenderPassAttachment& rhs);
 		bool ResourceCompability(ResourceInfo& lhs, ResourceInfo& rhs);
 		bool CheckImageUsageCompability(VkFormat lhs, VkImageUsageFlags usages);
 		bool CheckBufferUsageCompability(VkFormat lhs, VkBufferUsageFlags usages);
@@ -314,15 +337,51 @@ namespace vkrg
 		// one render graph can only compile once
 		bool m_HaveCompiled = false;
 
+		struct ResourceFormatCompabilityCache
+		{
+			std::vector<bool>				initialized;
+			std::vector<VkFormatProperties> formatProperties;
+			static constexpr uint32_t       supportedFormatCount = VK_FORMAT_ASTC_12x12_SRGB_BLOCK + 1;
+		} m_FormatCompabilityCache;
+
+		static constexpr uint32_t maxFrameOnFlightCount = 4;
+
+		struct RenderPassViewTable
+		{
+			struct View
+			{
+				union 
+				{
+					VkImageView imageView;
+					VkBufferView bufferView;
+				};
+				bool isImage;
+			};
+
+			std::vector<View> attachmentViews[maxFrameOnFlightCount];
+		};
+		std::vector<RenderPassViewTable> m_RPViewTable;
 
 		struct ResourceBindingInfo
 		{
-			ptr<gvk::Buffer> buffers[4];
-			ptr<gvk::Image>  images[4];
+			ptr<gvk::Buffer> buffers[maxFrameOnFlightCount];
+			ptr<gvk::Image>  images[maxFrameOnFlightCount];
 			bool			 dirtyFlag;
 		};
 		std::vector<ResourceBindingInfo> m_ExternalResourceBindings;
 		std::vector<ResourceBindingInfo> m_PhysicalResourceBindings;
+
+		ResourceBindingInfo* GetAssignedResourceBinding(ResourceAssignment assign);
+
+		// list of frame buffers 
+		struct RPFrameBuffer
+		{
+			VkFramebuffer frameBuffer[maxFrameOnFlightCount];
+			std::vector<VkImageView> frameBufferViews[maxFrameOnFlightCount];
+		};
+		std::vector<RPFrameBuffer>    m_RPFrameBuffers;
+
+		static constexpr VkImageTiling m_DefaultImageTiling = VK_IMAGE_TILING_OPTIMAL;
 };
 
 

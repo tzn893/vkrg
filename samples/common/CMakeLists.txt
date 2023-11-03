@@ -7,3 +7,6 @@ set(VKRG_SAMPLE_COMMON_SOURCE "${COMMON_SOURCE}" CACHE STRING "" FORCE)
 
 message( "common source files ${VKRG_SAMPLE_COMMON_SOURCE}")
 message( "common header files ${VKRG_SAMPLE_COMMON_HEADER}")
+
+add_subdirectory(tinygltf)
+add_subdirectory(KTX-Software)

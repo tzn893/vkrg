@@ -7,3 +7,12 @@
 [submodule "tests/googletest"]
 	path = tests/googletest
 	url = https://github.com/google/googletest.git
+[submodule "samples/common/tinygltf"]
+	path = samples/common/tinygltf
+	url = https://github.com/syoyo/tinygltf.git
+[submodule "samples/common/KTX-Software"]
+	path = samples/common/KTX-Software
+	url = https://github.com/KhronosGroup/KTX-Software.git
+[submodule "gvk"]
+	path = gvk
+	url = https://gitee.com/tzn123456/gvk.git

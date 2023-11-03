@@ -33,6 +33,8 @@ namespace vkrg
 			BufferInput
 		} type;
 
+		VkImageViewType    viewType;
+
 		uint32_t idx;
 		union
 		{
@@ -56,17 +58,68 @@ namespace vkrg
 		Compute
 	};
 
-	class RenderPass
+
+	struct RenderPassExtension
+	{
+		RenderPassExtension()
+		{
+			extensionType = ResourceExtensionType::Screen;
+			extension.screen.x = 1;
+			extension.screen.y = 1;
+		}
+
+		ResourceInfo::Extension extension;
+		ResourceExtensionType   extensionType; 
+
+		bool operator==(const RenderPassExtension& other) const
+		{
+			if (extensionType != other.extensionType) return false;
+			if (extensionType == ResourceExtensionType::Fixed)
+			{
+				return extension.fixed.x == other.extension.fixed.x &&
+					extension.fixed.y == other.extension.fixed.y &&
+					extension.fixed.z == other.extension.fixed.z;
+			}
+			if (extensionType == ResourceExtensionType::Screen)
+			{
+				return vkrg_fequal(extension.screen.x, other.extension.screen.x) &&
+					vkrg_fequal(extension.screen.y, other.extension.screen.y);
+			}
+			return false;
+		}
+	};
+
+	
+	class RenderPassRuntimeContext
 	{
 	public:
-		RenderPass(RenderGraph* graph, const char* name, RenderPassType type);
-
-		opt<RenderPassAttachment> AddImageColorOutput(const char* name, ImageSlice range);
-		opt<RenderPassAttachment> AddImageDepthOutput(const char* name, ImageSlice range);
-		opt<RenderPassAttachment> AddImageColorInput(const char* name, ImageSlice range);
+		RenderPassRuntimeContext(RenderGraph* graph, uint32_t frameIdx, uint32_t passIdx);
 		
-		opt<RenderPassAttachment> AddImageStorageInput(const char* name, ImageSlice range);
-		opt<RenderPassAttachment> AddImageStorageOutput(const char* name, ImageSlice range);
+		VkImageView GetImageAttachment(RenderPassAttachment attachment);
+		VkBufferView GetBufferAttachment(RenderPassAttachment attachment);
+
+		bool		CheckAttachmentDirtyFlag(RenderPassAttachment attachment);
+	
+	private:
+		RenderGraph* m_Graph;
+		uint32_t     m_FrameIdx;
+		uint32_t	 m_passIdx;
+		uint32_t	 m_mergedPassIdx;
+	};
+
+
+	class RenderPass
+	{
+		friend class RenderPassRuntimeContext;
+	public:
+		RenderPass(RenderGraph* graph, const char* name, RenderPassType type, RenderPassExtension expectedExtension);
+
+		opt<RenderPassAttachment> AddImageColorOutput(const char* name, ImageSlice range, VkImageViewType    viewType = VK_IMAGE_VIEW_TYPE_2D);
+		opt<RenderPassAttachment> AddImageDepthOutput(const char* name, ImageSlice range, VkImageViewType    viewType = VK_IMAGE_VIEW_TYPE_2D);
+		opt<RenderPassAttachment> AddImageColorInput(const char* name, ImageSlice range, VkImageViewType    viewType);
+		
+		opt<RenderPassAttachment> AddImageStorageInput(const char* name, ImageSlice range, VkImageViewType    viewType);
+		opt<RenderPassAttachment> AddImageStorageOutput(const char* name, ImageSlice range, VkImageViewType    viewType);
 
 		opt<RenderPassAttachment> AddBufferStorageInput(const char* name, BufferSlice range);
 		opt<RenderPassAttachment> AddBufferStorageOutput(const char* name, BufferSlice range);
@@ -79,6 +132,9 @@ namespace vkrg
 		VkImageLayout			  GetAttachmentExpectedState(const RenderPassAttachment& idx);
 		bool					  RequireClearColor(const RenderPassAttachment& idx);
 		void					  GetClearColor(const RenderPassAttachment& idx, VkClearValue& clearValue);
+		void					  OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd);
+
+		RenderPassExtension		  GetRenderPassExtension();
 
 		bool					  ValidationCheck(std::string& msg);
 
@@ -98,6 +154,8 @@ namespace vkrg
 		std::vector<RenderPassAttachment> m_Attachments;
 		std::vector<ResourceHandle>		  m_AttachmentResourceHandle;
 		RenderPassType m_RenderPassType;
+		
+		RenderPassExtension m_ExpectedExtension;
 	};
 
 	class RenderPassInterface
@@ -113,11 +171,14 @@ namespace vkrg
 		virtual void GetClearValue(uint32_t attachment, VkClearValue& value) = 0;
 
 		virtual void GetAttachmentStoreLoadOperation(uint32_t attachment, VkAttachmentLoadOp& loadOp, VkAttachmentStoreOp& storeOp,
-			VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp) {}
+			VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp) = 0;
+
+		virtual void GetAttachmentExpectedViewType(uint32_t attachment, VkImageViewType& initialGuess)
+		{}
 
 		virtual VkImageLayout GetAttachmentExpectedState(uint32_t attachment) = 0;
 
-		virtual void OnRender() = 0;
+		virtual void OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd) = 0;
 
 		virtual RenderPassType ExpectedType() = 0;
 
@@ -128,8 +189,8 @@ namespace vkrg
 	template<typename RPIType,typename ...Args>
 	void CreateRenderPassInterface(RenderPass* rp, Args... args)
 	{
-		static_assert(std::is_base_of_v<RenderPassInterface, RPType>, "RPType should be derived from render pass interface");
-		auto rpi = std::make_shared<RPType>(rp, args...);
+		static_assert(std::is_base_of_v<RenderPassInterface, RPIType>, "RPType should be derived from render pass interface");
+		auto rpi = std::make_shared<RPIType>(rp, args...);
 		rp->AttachInterface(rpi);
 	}
 }

@@ -1,9 +1,11 @@
 #include "DeferredPass.h"
 
 
-DeferredPass::DeferredPass(RenderPass* targetPass, RenderPassAttachment normalDepth, RenderPassAttachment color, RenderPassAttachment material, RenderPassAttachment depthStencil)
-:
-	RenderPassInterface(targetPass), normalDepth(normalDepth), color(color),material(material), depthStencil(depthStencil)
+DeferredPass::DeferredPass(RenderPass* targetPass, RenderPassAttachment normalDepth, RenderPassAttachment color,
+	RenderPassAttachment material, RenderPassAttachment depthStencil)
+	:
+	RenderPassInterface(targetPass), normalDepth(normalDepth), color(color),
+		material(material), depthStencil(depthStencil)
 {}
 
 void DeferredPass::GetClearValue(uint32_t attachment, VkClearValue& value)
@@ -19,9 +21,23 @@ void DeferredPass::GetClearValue(uint32_t attachment, VkClearValue& value)
 	}
 }
 
-void DeferredPass::OnRender()
+VkImageLayout DeferredPass::GetAttachmentExpectedState(uint32_t attachment)
 {
+	if (attachment == depthStencil.idx)
+	{
+		return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	}
+	
+	return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+}
 
+void DeferredPass::GetAttachmentStoreLoadOperation(uint32_t attachment, VkAttachmentLoadOp& loadOp, VkAttachmentStoreOp& storeOp, VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp)
+{
+	loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+	stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 }
 
 bool DeferredPass::OnValidationCheck(std::string& msg)
@@ -41,10 +57,6 @@ bool DeferredPass::OnValidationCheck(std::string& msg)
 		return false;
 	}
 	if (!CheckAttachment(material, "material", msg))
-	{
-		return false;
-	}
-	if (!CheckAttachment(position, "position", msg))
 	{
 		return false;
 	}
