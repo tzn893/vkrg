@@ -74,9 +74,9 @@ void Application::Run()
 			current_semaphore_idx = current_frame_idx;
 			current_command_buffer_idx = current_frame_idx;
 
-			vkWaitForFences(context->GetDevice(), 1, &fences[current_fence_idx], VK_TRUE, 0xffffffff);
-			vkResetFences(context->GetDevice(), 1, &fences[current_fence_idx]);
 		}
+		vkWaitForFences(context->GetDevice(), 1, &fences[current_fence_idx], VK_TRUE, 0xffffffff);
+		vkResetFences(context->GetDevice(), 1, &fences[current_fence_idx]);
 
 
 		VkCommandBuffer cmd = cmdBuffer[current_command_buffer_idx];
@@ -121,14 +121,9 @@ void Application::Run()
 			gvk::SemaphoreInfo()
 			.Wait(acquire_image_semaphore, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
 			.Signal(color_output_finish_semaphore[current_command_buffer_idx]), 
-		NULL);
+			fences[current_fence_idx]);
 
 		context->Present(gvk::SemaphoreInfo().Wait(color_output_finish, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
-
-		if (!async)
-		{
-			context->WaitForDeviceIdle();
-		}
 
 		window->UpdateWindow();
 	}

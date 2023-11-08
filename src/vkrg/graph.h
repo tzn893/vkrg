@@ -247,7 +247,7 @@ namespace vkrg
 		uint32_t			 ScoreMergedNode(DAGMergedNode node);
 
 		DirectionalGraph<MergedRenderPass>		   m_MergedRenderPassGraph;
-		std::vector<DAGMergedNode>				   m_MergedRenderPasses;
+		// std::vector<DAGMergedNode>				   m_MergedRenderPasses;
 
 		DAGMergedNode	   CreateNewMergedNode(DAGNode node, bool mergable);
 		opt<tpl<DAGMergedNode, uint32_t>> FindInvolvedMergedPass(DAGNode node);
@@ -258,6 +258,8 @@ namespace vkrg
 		DAGMergedNode FindLastAccessedNodeForResource(uint32_t logicalResourceIdx);
 
 		tpl<uint32_t, uint32_t, uint32_t> GetExpectedExtension(ResourceInfo::Extension ext, ResourceExtensionType type);
+
+		uint32_t GetRenderGraphPassInfoIndex(DAGMergedNode node);
 
 		struct ResourceAssignment
 		{
@@ -326,8 +328,9 @@ namespace vkrg
 				RenderPassExtension expectedExtension;
 			} render;
 
+			uint32_t targetMergedPassIdx;
 		};
-		std::vector<RenderGraphPassInfo> m_vulkanMergedPassInfo;
+		std::vector<RenderGraphPassInfo> m_renderGraphPassInfo;
 
 		bool SubresourceCompability(RenderPassAttachment& lhs, RenderPassAttachment& rhs);
 		bool ResourceCompability(ResourceInfo& lhs, ResourceInfo& rhs);

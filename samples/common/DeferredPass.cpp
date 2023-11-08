@@ -21,16 +21,6 @@ void DeferredPass::GetClearValue(uint32_t attachment, VkClearValue& value)
 	}
 }
 
-VkImageLayout DeferredPass::GetAttachmentExpectedState(uint32_t attachment)
-{
-	if (attachment == depthStencil.idx)
-	{
-		return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	}
-	
-	return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-}
-
 void DeferredPass::GetAttachmentStoreLoadOperation(uint32_t attachment, VkAttachmentLoadOp& loadOp, VkAttachmentStoreOp& storeOp, VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp)
 {
 	loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -39,6 +29,7 @@ void DeferredPass::GetAttachmentStoreLoadOperation(uint32_t attachment, VkAttach
 	stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 }
+
 
 bool DeferredPass::OnValidationCheck(std::string& msg)
 {

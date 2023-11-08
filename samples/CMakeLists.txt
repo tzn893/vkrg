@@ -6,4 +6,5 @@ add_compile_definitions(VKRG_SHADER_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/commo
 add_compile_definitions(VKRG_MODEL_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/models")
 
 add_subdirectory(deferred)
-add_subdirectory(deferred_serialized)
+# add_subdirectory(deferred_serialized)
+add_subdirectory(tile_based_deferred)

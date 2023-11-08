@@ -6,14 +6,6 @@ DeferredShading::DeferredShading(RenderPass* targetPass, RenderPassAttachment no
 {
 }
 
-VkImageLayout DeferredShading::GetAttachmentExpectedState(uint32_t attachment)
-{
-	if (attachment == color_output.idx)
-	{
-		return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-	}
-	return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-}
 
 void DeferredShading::GetAttachmentStoreLoadOperation(uint32_t attachment, VkAttachmentLoadOp& loadOp, VkAttachmentStoreOp& storeOp, VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp)
 {

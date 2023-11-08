@@ -10,8 +10,6 @@ public:
 
 	virtual void GetClearValue(uint32_t attachment, VkClearValue& value) override;
 
-	virtual VkImageLayout GetAttachmentExpectedState(uint32_t attachment) override;
-
 	virtual void GetAttachmentStoreLoadOperation(uint32_t attachment, VkAttachmentLoadOp& loadOp, VkAttachmentStoreOp& storeOp,
 		VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp) override;
 

@@ -90,13 +90,20 @@ namespace vkrg
 	};
 
 	
+	struct BufferAttachment
+	{
+		VkBuffer buffer;
+		uint64_t offset;
+		uint64_t size;
+	};
+
 	class RenderPassRuntimeContext
 	{
 	public:
 		RenderPassRuntimeContext(RenderGraph* graph, uint32_t frameIdx, uint32_t passIdx);
 		
 		VkImageView GetImageAttachment(RenderPassAttachment attachment);
-		VkBufferView GetBufferAttachment(RenderPassAttachment attachment);
+		BufferAttachment GetBufferAttachment(RenderPassAttachment attachment);
 
 		bool		CheckAttachmentDirtyFlag(RenderPassAttachment attachment);
 	
@@ -168,15 +175,15 @@ namespace vkrg
 		// called when compiling graph
 		virtual bool OnValidationCheck(std::string& msg) { return true; }
 
-		virtual void GetClearValue(uint32_t attachment, VkClearValue& value) = 0;
+		virtual void GetClearValue(uint32_t attachment, VkClearValue& value) {}
 
 		virtual void GetAttachmentStoreLoadOperation(uint32_t attachment, VkAttachmentLoadOp& loadOp, VkAttachmentStoreOp& storeOp,
-			VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp) = 0;
+			VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp) {}
 
 		virtual void GetAttachmentExpectedViewType(uint32_t attachment, VkImageViewType& initialGuess)
 		{}
 
-		virtual VkImageLayout GetAttachmentExpectedState(uint32_t attachment) = 0;
+		virtual void GetAttachmentExpectedState(uint32_t attachment, VkImageLayout& initialGuess) {}
 
 		virtual void OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd) = 0;
 

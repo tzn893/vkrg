@@ -1,5 +1,5 @@
 #version 450
-#include "camera.glsli"
+#include "tile.glsli"
 
 layout (location = 0) in vec2 inUV;
 layout (perCamera, binding = 0) uniform CameraUBO
@@ -7,10 +7,16 @@ layout (perCamera, binding = 0) uniform CameraUBO
 	Camera camera;
 } cameraUBO;
 
-layout (perDraw, binding = 0) uniform LightUBO
+layout(perDraw, binding = 0) buffer CullingResult
 {
-	Lights lights;
-} lightUBO;
+    // currently we assume maximun screen resolution is 1920x1080
+    TileLighting tileLighting[8100];
+} cullingResult;
+
+layout(perDraw, binding = 1) uniform ScreenUBO
+{
+    Screen ubo;
+} screen;
 
 layout (perMaterial, binding = 0) uniform sampler2D colorSampler;
 layout (perMaterial, binding = 1) uniform sampler2D materialSampler;
@@ -20,6 +26,7 @@ layout (perMaterial, binding = 3) uniform sampler2D depthSampler;
 layout (location = 0) out vec4 outColor;
 
 const float PI = 3.14159265359;
+
 
 //#define ROUGHNESS_PATTERN 1
 struct PBRParameter 
@@ -54,11 +61,10 @@ PBRParameter GetPbrParameter()
 	PBRParameter param;
 	param.N = normalize(normal.xyz * 2.0 - 1.0);
 
-	
 	param.V = normalize(cameraUBO.camera.cameraPosition - position.xyz);
 	param.albedo = color;
 	param.roughness = metallicRoughness.y;
-	param.metallic = 0;//metallicRoughness.x;
+	param.metallic = metallicRoughness.x;
 	param.P = position.xyz;
 
 	return param;
@@ -154,12 +160,13 @@ vec3 ComputePBR(PBRParameter param, Light light)
 // ----------------------------------------------------------------------------
 void main()
 {		  
-	
+	TileLighting lights = cullingResult.tileLighting[GetTileIdx(screen.ubo, inUV)];
+
 	PBRParameter param = GetPbrParameter();
 	// Specular contribution
 	vec3 Lo = vec3(0.0);
-	for (int i = 0; i < lightUBO.lights.count; i++) {
-		Lo += ComputePBR(param ,lightUBO.lights.lights[i]);
+	for (int i = 0; i < lights.lightCount.x; i++) {
+		Lo += ComputePBR(param ,lights.lights[i]);
 	};
 
 	// Combine with ambient

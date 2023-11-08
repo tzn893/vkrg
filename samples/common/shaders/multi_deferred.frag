@@ -9,7 +9,8 @@ layout (perCamera, binding = 0) uniform CameraUBO
 
 layout (perDraw, binding = 0) uniform LightUBO
 {
-	Lights lights;
+	Light lights[2047];
+    int   count;
 } lightUBO;
 
 layout (perMaterial, binding = 0) uniform sampler2D colorSampler;
@@ -158,8 +159,8 @@ void main()
 	PBRParameter param = GetPbrParameter();
 	// Specular contribution
 	vec3 Lo = vec3(0.0);
-	for (int i = 0; i < lightUBO.lights.count; i++) {
-		Lo += ComputePBR(param ,lightUBO.lights.lights[i]);
+	for (int i = 0; i < lightUBO.count; i++) {
+		Lo += ComputePBR(param ,lightUBO.lights[i]);
 	};
 
 	// Combine with ambient

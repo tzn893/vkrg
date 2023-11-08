@@ -8,10 +8,6 @@ public:
 	DeferredShading(RenderPass* targetPass, RenderPassAttachment normal, RenderPassAttachment color,
 		RenderPassAttachment material, RenderPassAttachment color_output, RenderPassAttachment depth);
 
-	virtual void GetClearValue(uint32_t attachment, VkClearValue& value) {}
-
-	virtual VkImageLayout GetAttachmentExpectedState(uint32_t attachment) override;
-
 	virtual void GetAttachmentStoreLoadOperation(uint32_t attachment, VkAttachmentLoadOp& loadOp, VkAttachmentStoreOp& storeOp,
 		VkAttachmentLoadOp& stencilLoadOp, VkAttachmentStoreOp& stencilStoreOp) override;
 

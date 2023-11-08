@@ -241,7 +241,7 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
-		if (CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))) return std::nullopt;
+		if (!CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))) return std::nullopt;
 
 		RenderPassAttachment attachment{};
 		attachment.idx = m_Attachments.size();
@@ -267,7 +267,7 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
-		if (CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))) return std::nullopt;
+		if (!CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))) return std::nullopt;
 
 		RenderPassAttachment attachment{};
 		attachment.idx = m_Attachments.size();
@@ -293,7 +293,7 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
-		if (CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))) return std::nullopt;
+		if (!CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))) return std::nullopt;
 
 		RenderPassAttachment attachment{};
 		attachment.idx = m_Attachments.size();
@@ -326,7 +326,31 @@ namespace vkrg {
 
 	VkImageLayout RenderPass::GetAttachmentExpectedState(const RenderPassAttachment& idx)
 	{
-		return  m_RenderPassInterface->GetAttachmentExpectedState(idx.idx);
+		VkImageLayout initGuess = VK_IMAGE_LAYOUT_UNDEFINED;
+		if (idx.type == RenderPassAttachment::Type::ImageColorOutput)
+		{
+			initGuess = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
+		else if (idx.type == RenderPassAttachment::Type::ImageColorInput)
+		{
+			initGuess = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		}
+		else if (idx.type == RenderPassAttachment::Type::ImageDepthOutput)
+		{
+			initGuess = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		}
+		else if (idx.type == RenderPassAttachment::Type::ImageStorageOutput)
+		{
+			initGuess = VK_IMAGE_LAYOUT_GENERAL;
+		}
+		else if (idx.type == RenderPassAttachment::Type::ImageStorageInput)
+		{
+			initGuess = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+		}
+	
+		m_RenderPassInterface->GetAttachmentExpectedState(idx.idx, initGuess);
+
+		return initGuess;
 	}
 
 	bool RenderPass::RequireClearColor(const RenderPassAttachment& idx)
@@ -371,8 +395,7 @@ namespace vkrg {
 
 		for (auto& attachment : m_Attachments)
 		{
-			if (attachment.type == RenderPassAttachment::ImageStorageInput || attachment.type == RenderPassAttachment::BufferStorageInput
-				|| attachment.type == RenderPassAttachment::BufferStorageOutput || attachment.type == RenderPassAttachment::ImageStorageOutput)
+			if (attachment.type == RenderPassAttachment::BufferStorageOutput || attachment.type == RenderPassAttachment::ImageStorageOutput)
 			{
 				if (m_RenderPassType != RenderPassType::Compute)
 				{
@@ -382,7 +405,7 @@ namespace vkrg {
 			}
 			if (attachment.type == RenderPassAttachment::ImageColorOutput)
 			{
-				if (m_RenderPassInterface->GetAttachmentExpectedState(attachment.idx) != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+				if (GetAttachmentExpectedState(attachment) != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
 				{
 					msg = "invalid attachment format " + std::to_string(attachment.idx) + " expected VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL";
 					return false;
@@ -390,7 +413,7 @@ namespace vkrg {
 			}
 			if (attachment.type == RenderPassAttachment::ImageDepthOutput)
 			{
-				if (m_RenderPassInterface->GetAttachmentExpectedState(attachment.idx) != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+				if (GetAttachmentExpectedState(attachment) != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
 				{
 					msg = "invalid attachment format " + std::to_string(attachment.idx) + " expected VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL";
 					return false;
@@ -458,14 +481,26 @@ namespace vkrg {
 		return view.imageView;
 	}
 
-	VkBufferView RenderPassRuntimeContext::GetBufferAttachment(RenderPassAttachment attachment)
+	BufferAttachment RenderPassRuntimeContext::GetBufferAttachment(RenderPassAttachment attachment)
 	{
 		vkrg_assert(attachment.targetPass == m_Graph->m_RenderPassList[m_passIdx].pass.get());
 
-		auto& view = m_Graph->m_RPViewTable[m_passIdx].attachmentViews[m_FrameIdx][attachment.idx];
-		vkrg_assert(!view.isImage);
+		auto& logicalResource = attachment.targetPass->m_AttachmentResourceHandle[attachment.idx];
+		auto& logicalResourceAssignment = m_Graph->m_LogicalResourceAssignmentTable[logicalResource.idx];
 
-		return view.bufferView;
+		vkrg_assert(m_Graph->m_LogicalResourceList[logicalResource.idx].info.IsBuffer());
+
+		RenderGraph::ResourceBindingInfo* binding = NULL;
+		if (logicalResourceAssignment.external)
+		{
+			binding = &m_Graph->m_PhysicalResourceBindings[logicalResourceAssignment.idx];
+		}
+		else
+		{
+			binding = &m_Graph->m_ExternalResourceBindings[logicalResourceAssignment.idx];
+		}
+
+		return BufferAttachment{ binding->buffers[m_FrameIdx]->GetBuffer(), attachment.range.bufferRange.offset, attachment.range.bufferRange.size};
 	}
 
 

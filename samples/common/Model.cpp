@@ -1291,6 +1291,9 @@ void vkglTF::Model::loadFromFile(std::string filename, gvk::ptr<gvk::Context> ct
 							vertex.pos = glm::vec3(localMatrix * glm::vec4(vertex.pos, 1.0f));
 							vertex.normal = glm::normalize(glm::mat3(localMatrix) * vertex.normal);
 						}
+						
+						boundBox.Merge(vertex.pos);
+
 						// Flip Y-Axis of vertex positions
 						if (flipY) {
 							vertex.pos.y *= -1.0f;
@@ -1643,6 +1646,11 @@ vkglTF::Node* vkglTF::Model::nodeFromIndex(uint32_t index) {
 	return nodeFound;
 }
 
+vkglTF::BoundingBox vkglTF::Model::GetBox()
+{
+	return boundBox;
+}
+
 /*
 void vkglTF::Model::prepareNodeDescriptor(vkglTF::Node* node, VkDescriptorSetLayout descriptorSetLayout) {
 	if (node->mesh) {
@@ -1780,4 +1788,10 @@ vkglTF::Texture* vkglTF::Material::GetTexture(MaterialTexture texture)
 	}
 
 	return nullptr;
+}
+
+void vkglTF::BoundingBox::Merge(glm::vec3 pt)
+{
+	upper = glm::max(upper, pt);
+	lower = glm::min(lower, pt);
 }

@@ -1,0 +1,29 @@
+#ifndef TILE_GLSLI
+#define TILE_GLSLI
+
+#include "camera.glsli"
+
+struct TileLighting
+{
+    ivec4 lightCount;
+    vec4  padding;
+    Light lights[15];
+};
+
+struct Screen 
+{
+    // (resolution_x, resolution_y, 1 / resolution_x, 1 / resolution_y)
+    vec4  resolution;
+    // (tile_count_x, tile_count_y, 1 / tile_count_x, 1 / tile_count_y)
+    vec4  tileCount;
+};
+
+int GetTileIdx(Screen screen, vec2 uv)
+{
+	int x_tile_idx = int(uv.x / screen.tileCount.z);
+	int y_tile_idx = int(uv.y / screen.tileCount.w);
+
+	return y_tile_idx * int(screen.tileCount.x) + x_tile_idx;
+}
+
+#endif

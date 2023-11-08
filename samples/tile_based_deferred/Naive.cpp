@@ -5,7 +5,9 @@
 #include "Model.h"
 using namespace vkrg;
 
-constexpr int MAX_LIGHT_COUNT = 16;
+constexpr int GRID_HEIGHT = 8;
+constexpr int GRID_COUNT = 16;
+constexpr int MAX_LIGHT_COUNT = GRID_COUNT * GRID_COUNT * GRID_HEIGHT - 1;
 
 #ifndef LIGHT_TYPE_POINT
 #define LIGHT_TYPE_POINT 0
@@ -163,8 +165,8 @@ public:
 
 		auto& backBuffers = context->GetBackBuffers();
 		auto& dataFrame = rg->GetExternalDataFrame();
-		
-		for (uint32_t i = 0;i < backBuffers.size(); i++)
+
+		for (uint32_t i = 0; i < backBuffers.size(); i++)
 		{
 			dataFrame.BindImage("backBuffer", i, backBuffers[i]);
 		}
@@ -176,9 +178,35 @@ public:
 	{
 		glm::vec4 vec;
 		vec.w = LIGHT_TYPE_POINT;
-		
-		lightData.count = 1;
-		lightData.lights[0] = MakeLight(LIGHT_TYPE_POINT, glm::vec3(0, 1, 0), glm::vec3(100, 100, 100));
+		lightData.count = MAX_LIGHT_COUNT;
+
+		vkglTF::BoundingBox box = model.GetBox();
+
+		float x_grid = (box.upper.x - box.lower.x) / GRID_COUNT;
+		float z_grid = (box.upper.z - box.lower.z) / GRID_COUNT;
+		float y_grid = (box.upper.y - box.upper.y) / GRID_COUNT;
+
+		sizeof(Light);
+
+		glm::vec3 lower = box.lower;
+		for (uint32_t y = 0; y < GRID_HEIGHT; y++)
+		{
+			for (uint32_t z = 0; z < GRID_COUNT; z++)
+			{
+				for (uint32_t x = 0; x < GRID_COUNT; x++)
+				{
+					uint32_t lightIdx = x + z * GRID_COUNT + y * GRID_COUNT * GRID_COUNT;
+					
+					if (lightIdx >= MAX_LIGHT_COUNT)
+					{
+						break;
+					}
+					glm::vec3 pos = lower + glm::vec3(x * x_grid, y * y_grid, z * z_grid);
+					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos + glm::vec3(0, 1, 0), glm::vec3(0.1, 0.1, 0.1));
+				}
+			}
+		}
+
 	}
 
 	virtual bool CustomInitialize() override
@@ -191,7 +219,7 @@ public:
 			include_directorys, gvk_count_of(include_directorys),
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
-		auto deferredShadingFrag = context->CompileShader("deferred.frag", gvk::ShaderMacros(),
+		auto deferredShadingFrag = context->CompileShader("multi_deferred.frag", gvk::ShaderMacros(),
 			include_directorys, gvk_count_of(include_directorys),
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
@@ -253,17 +281,17 @@ public:
 		samplerCI.maxLod = (float)1;
 		backBufferSampler = context->CreateSampler(samplerCI).value();
 
-		lightDescriptor =  descriptorAlloc->Allocate(lightLayout.value()).value();
+		lightDescriptor = descriptorAlloc->Allocate(lightLayout.value()).value();
 		cameraDescriptor = descriptorAlloc->Allocate(cameraLayout.value()).value();
 		materialDescriptor = descriptorAlloc->Allocate(materialLayout.value()).value();
 		shadingCameraDescriptor = descriptorAlloc->Allocate(shadingCameraLayout.value()).value();
-		
+
 
 		GvkDescriptorSetWrite()
-		.BufferWrite(lightDescriptor, "lightUBO", lightBuffer->GetBuffer(), 0, sizeof(lightData))
-		.BufferWrite(cameraDescriptor, "cameraUBO", cameraBuffer->GetBuffer(), 0, sizeof(CameraUBO))
-		.BufferWrite(shadingCameraDescriptor, "cameraUBO", cameraBuffer->GetBuffer(), 0, sizeof(CameraUBO))
-		.Emit(context->GetDevice());
+			.BufferWrite(lightDescriptor, "lightUBO", lightBuffer->GetBuffer(), 0, sizeof(lightData))
+			.BufferWrite(cameraDescriptor, "cameraUBO", cameraBuffer->GetBuffer(), 0, sizeof(CameraUBO))
+			.BufferWrite(shadingCameraDescriptor, "cameraUBO", cameraBuffer->GetBuffer(), 0, sizeof(CameraUBO))
+			.Emit(context->GetDevice());
 
 		return true;
 	}
@@ -297,13 +325,13 @@ void MyDeferredPass::OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd
 {
 	CameraUBO cameraData = app->m_Camera.GetCameraUBO();
 	app->cameraBuffer->Write(&cameraData, 0, sizeof(CameraUBO));
-	
+
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, app->deferredPassPipeline->GetPipeline());
-	
-	
+
+
 	GvkDescriptorSetBindingUpdate(cmd, app->deferredPassPipeline)
-	.BindDescriptorSet(app->cameraDescriptor)
-	.Update();
+		.BindDescriptorSet(app->cameraDescriptor)
+		.Update();
 
 	app->model.draw(cmd, vkglTF::BindImages | vkglTF::RenderOpaqueNodes);
 }
@@ -318,23 +346,23 @@ void MyDeferredShading::OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer 
 		VkImageView materialView = ctx.GetImageAttachment(material);
 		VkImageView colorView = ctx.GetImageAttachment(color);
 		VkImageView depthView = ctx.GetImageAttachment(depth);
-	
+
 		GvkDescriptorSetWrite()
-		.ImageWrite(app->materialDescriptor, "depthSampler", app->backBufferSampler, depthView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-		.ImageWrite(app->materialDescriptor, "normalSampler", app->backBufferSampler, normalView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-		.ImageWrite(app->materialDescriptor, "materialSampler", app->backBufferSampler, materialView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-		.ImageWrite(app->materialDescriptor, "colorSampler", app->backBufferSampler, colorView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-		.Emit(app->context->GetDevice());
+			.ImageWrite(app->materialDescriptor, "depthSampler", app->backBufferSampler, depthView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+			.ImageWrite(app->materialDescriptor, "normalSampler", app->backBufferSampler, normalView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+			.ImageWrite(app->materialDescriptor, "materialSampler", app->backBufferSampler, materialView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+			.ImageWrite(app->materialDescriptor, "colorSampler", app->backBufferSampler, colorView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+			.Emit(app->context->GetDevice());
 	}
 
-	
+
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, app->deferredShadingPipeline->GetPipeline());
 
 	GvkDescriptorSetBindingUpdate(cmd, app->deferredShadingPipeline)
-	.BindDescriptorSet(app->shadingCameraDescriptor)
-	.BindDescriptorSet(app->lightDescriptor)
-	.BindDescriptorSet(app->materialDescriptor)
-	.Update();
+		.BindDescriptorSet(app->shadingCameraDescriptor)
+		.BindDescriptorSet(app->lightDescriptor)
+		.BindDescriptorSet(app->materialDescriptor)
+		.Update();
 
 	vkCmdDraw(cmd, 6, 1, 0, 0);
 }
@@ -345,6 +373,6 @@ int main()
 {
 	constexpr uint32_t initWidth = 800, initHeight = 800;
 	std::make_shared<DeferredApplication>(initWidth, initHeight)->Run();
-	
+
 	return 0;
 }

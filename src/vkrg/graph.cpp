@@ -43,7 +43,7 @@ namespace vkrg
 
     opt<ResourceHandle> RenderGraph::AddGraphResource(const char* name, ResourceInfo info, bool external, VkImageLayout layout)
     {
-        vkrg_assert(external || layout != VK_IMAGE_LAYOUT_UNDEFINED);
+        vkrg_assert(external || !(info.IsImage() && layout == VK_IMAGE_LAYOUT_UNDEFINED));
 
         if (FindGraphResource(name).has_value()) return std::nullopt;
 
@@ -203,7 +203,10 @@ namespace vkrg
 
         auto [mergedPass, subpassIdx] = FindInvolvedMergedPass(m_RenderPassNodeList[handle.idx]).value();
         
-        gvk::ptr<gvk::RenderPass> vkrp = m_vulkanMergedPassInfo[mergedPass->idx].render.renderPass;
+        uint32_t renderGraphPassIndex = GetRenderGraphPassInfoIndex(mergedPass);
+        vkrg_assert(m_renderGraphPassInfo.size() != renderGraphPassIndex);
+
+        gvk::ptr<gvk::RenderPass> vkrp = m_renderGraphPassInfo[renderGraphPassIndex].render.renderPass;
 
         return std::make_tuple(vkrp, subpassIdx);
     }
@@ -539,7 +542,7 @@ namespace vkrg
                 auto incomingMergedNode = dependingMergedNodes[i];
                 if (currentMergedNode != incomingMergedNode)
                 {
-                    m_MergedRenderPassGraph.AddEdge(currentMergedNode, incomingMergedNode);
+                    m_MergedRenderPassGraph.AddEdge(incomingMergedNode, currentMergedNode);
                 }
             }
         }
@@ -1009,7 +1012,7 @@ namespace vkrg
             externalResourceLayouts.push_back(ImageLayoutStatus(m_LogicalResourceList[externalResource.handle.idx].info));
         }
         
-        for (auto currentMergedPass : m_MergedRenderPasses)
+        for (auto currentMergedPass = m_MergedRenderPassGraph.Begin(); currentMergedPass != m_MergedRenderPassGraph.End(); currentMergedPass++)
         {
             RenderGraphPassInfo info;
 
@@ -1370,7 +1373,18 @@ namespace vkrg
                     auto& desc = frameBufferAttachmentDescs[i];
                     auto& fbAttachmentAssign = frameBufferAttachments[i].assign;
 
+
+                    //http://geekfaner.com/shineengine/blog18_Vulkanv1.2_4.html
+                    //如果一个render pass使用多个attachment alias相同的device memory，则每个attachment都必须包含 VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT 。attachments alias相同内存有如下几种方式：
+
+                    //  多个attachment在创建framebuffer的时候，对应同一个image view
+                    //  多个attachment对应同一个image的同一个image subresource的不同image view
+                    //  多个attachment对应views of distinct image subresources bound to 覆盖的内存范围
                     VkAttachmentDescriptionFlags flags = 0;
+
+
+                    // 检查当前render pass的attachment之间是否有重叠
+                    // 若是则额外给attachment加 VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT
                     if (fbAttachmentAssign.external)
                     {
                         flags |= externalResourceAttachmentTable[fbAttachmentAssign.idx].MayAlias() ? VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT : 0;
@@ -1510,10 +1524,11 @@ namespace vkrg
                     msg = "fail to create vulkan render pass";
                     return RenderGraphCompileState::Error_FailToCreateRenderPass;
                 }
-
-                m_vulkanMergedPassInfo.push_back(info);
             }
-            
+
+            info.targetMergedPassIdx = currentMergedPass.GetId();
+
+            m_renderGraphPassInfo.push_back(info);
         }
 
         return RenderGraphCompileState::Success;
@@ -1579,7 +1594,6 @@ namespace vkrg
             const auto& info = m_PhysicalResources[physicalResourceIdx].info;
 
             binding.dirtyFlag = true;
-            uint32_t frameCount = m_Options.disableFrameOnFlight ? 1 : m_Options.flightFrameCount;
             for (uint32_t i =0 ;i < m_Options.flightFrameCount;i++)
             {
                 if (info.IsBuffer() && binding.buffers[i] == nullptr)
@@ -1612,6 +1626,8 @@ namespace vkrg
                     // this branch should not be reached
                     vkrg_assert(false);
                 }
+
+                if (m_Options.disableFrameOnFlight) break;
             }
         }
 
@@ -1676,7 +1692,7 @@ namespace vkrg
                         if (attachment.IsBuffer())
                         {
                             uint32_t targetBufferIndex = frameIdx;
-                            if (m_Options.disableFrameOnFlight && resource.external)
+                            if (m_Options.disableFrameOnFlight && !resource.external)
                             {
                                 targetBufferIndex = 0;
                             }
@@ -1693,7 +1709,7 @@ namespace vkrg
                         else if (attachment.IsImage())
                         {
                             uint32_t targetImageIndex = frameIdx;
-                            if (m_Options.disableFrameOnFlight && resource.external)
+                            if (m_Options.disableFrameOnFlight && !resource.external)
                             {
                                 targetImageIndex = 0;
                             }
@@ -1723,9 +1739,9 @@ namespace vkrg
     {
         // TODO update frame buffer according to view update
 
-        for (uint32_t renderPassIdx = 0; renderPassIdx < m_vulkanMergedPassInfo.size(); renderPassIdx++)
+        for (uint32_t renderPassIdx = 0; renderPassIdx < m_renderGraphPassInfo.size(); renderPassIdx++)
         {
-            auto& passInfo = m_vulkanMergedPassInfo[renderPassIdx];
+            auto& passInfo = m_renderGraphPassInfo[renderPassIdx];
             auto& rpfBuffer = m_RPFrameBuffers[renderPassIdx];
             if (passInfo.type == RenderPassType::Compute)
             {
@@ -1791,19 +1807,25 @@ namespace vkrg
 
                 if (frameBufferRecreate)
                 {
-                    RenderPassExtension& ext = m_vulkanMergedPassInfo[renderPassIdx].render.expectedExtension;
+                    RenderPassExtension& ext = m_renderGraphPassInfo[renderPassIdx].render.expectedExtension;
                     for (uint32_t frameIdx = 0; frameIdx < m_Options.flightFrameCount; frameIdx++)
                     {
-                        auto& attachments = m_vulkanMergedPassInfo[renderPassIdx].render.fbAttachmentIdx;
+                        auto& attachments = m_renderGraphPassInfo[renderPassIdx].render.fbAttachmentIdx;
 
                         for (uint32_t attachmentIdx = 0; attachmentIdx < attachments.size(); attachmentIdx++)
                         {
                             ResourceBindingInfo* binding = GetAssignedResourceBinding(attachments[attachmentIdx].assign);
 
+                            uint32_t targetFrameIdx = frameIdx;
+                            if (!attachments[attachmentIdx].assign.external && m_Options.disableFrameOnFlight)
+                            {
+                                targetFrameIdx = 0;
+                            }
+
                             auto& subresource = attachments[attachmentIdx].subresource;
 
                             // views will be cached and used so just create a new view is enough
-                            auto view = binding->images[frameIdx]->CreateView(subresource.aspectMask,
+                            auto view = binding->images[targetFrameIdx]->CreateView(subresource.aspectMask,
                                 subresource.baseMipLevel,
                                 subresource.levelCount,
                                 subresource.baseArrayLayer,
@@ -1822,7 +1844,7 @@ namespace vkrg
                         auto [w, h, d] = GetExpectedExtension(ext.extension, ext.extensionType);
 
 
-                        auto fb = m_vulkanContext.ctx->CreateFrameBuffer(m_vulkanMergedPassInfo[renderPassIdx].render.renderPass,
+                        auto fb = m_vulkanContext.ctx->CreateFrameBuffer(m_renderGraphPassInfo[renderPassIdx].render.renderPass,
                             m_RPFrameBuffers[renderPassIdx].frameBufferViews[frameIdx].data(),
                             w, h, d);
                         vkrg_assert(fb.has_value());
@@ -1851,11 +1873,11 @@ namespace vkrg
     void RenderGraph::GenerateCommands(VkCommandBuffer cmd, uint32_t frameIdx)
     {
         // TODO main body of excution
-        for (uint32_t passIdx = 0; passIdx < m_vulkanMergedPassInfo.size(); passIdx++)
+        for (uint32_t passIdx = 0; passIdx < m_renderGraphPassInfo.size(); passIdx++)
         {
-            if (m_vulkanMergedPassInfo[passIdx].type == RenderPassType::Graphics)
+            if (m_renderGraphPassInfo[passIdx].type == RenderPassType::Graphics)
             {
-                auto& renderData = m_vulkanMergedPassInfo[passIdx].render;
+                auto& renderData = m_renderGraphPassInfo[passIdx].render;
                 VkFramebuffer frameBuffer = m_RPFrameBuffers[passIdx].frameBuffer[frameIdx];
 
                 auto [w, h, _] = GetExpectedExtension(renderData.expectedExtension.extension, renderData.expectedExtension.extensionType);
@@ -1914,7 +1936,7 @@ namespace vkrg
             }
             else
             {
-                auto& computeData = m_vulkanMergedPassInfo[passIdx].compute;
+                auto& computeData = m_renderGraphPassInfo[passIdx].compute;
                 for (uint32_t barrierIdx = 0; barrierIdx < computeData.barriers.size(); barrierIdx++)
                 {
                     auto& barrier = computeData.barriers[barrierIdx];
@@ -1935,14 +1957,14 @@ namespace vkrg
 
     void RenderGraph::InitializeRPFrameBufferTable()
     {
-        m_RPFrameBuffers.resize(m_vulkanMergedPassInfo.size());
-        for (uint32_t i = 0;i < m_vulkanMergedPassInfo.size(); i++)
+        m_RPFrameBuffers.resize(m_renderGraphPassInfo.size());
+        for (uint32_t i = 0;i < m_renderGraphPassInfo.size(); i++)
         {
-            if (m_vulkanMergedPassInfo[i].type == RenderPassType::Graphics)
+            if (m_renderGraphPassInfo[i].type == RenderPassType::Graphics)
             {
                 for (uint32_t fi = 0; fi < m_Options.flightFrameCount; fi++)
                 {
-                    m_RPFrameBuffers[i].frameBufferViews[fi].resize(m_vulkanMergedPassInfo[i].render.fbAttachmentIdx.size());
+                    m_RPFrameBuffers[i].frameBufferViews[fi].resize(m_renderGraphPassInfo[i].render.fbAttachmentIdx.size());
                 }
             }
         }
@@ -1990,17 +2012,19 @@ namespace vkrg
     RenderGraph::DAGMergedNode RenderGraph::CreateNewMergedNode(DAGNode node, bool mergable)
     {
         MergedRenderPass pass{};
-        pass.idx = m_MergedRenderPasses.size();
+        pass.idx = m_MergedRenderPassGraph.NodeCount();
         pass.renderPasses.push_back(node);
         pass.canBeMerged = mergable;
 
         DAGMergedNode currentMergedNode = m_MergedRenderPassGraph.AddNode(pass);
-        m_MergedRenderPasses.push_back(currentMergedNode);
+
+        vkrg_assert(pass.idx == currentMergedNode.GetId());
         return currentMergedNode;
     }
 
     opt<tpl<RenderGraph::DAGMergedNode, uint32_t>> RenderGraph::FindInvolvedMergedPass(DAGNode node)
     {
+        /*
         for (uint32_t i = 0;i < m_MergedRenderPasses.size();i++)
         {
             //for (auto renderPassNode : (*m_MergedRenderPasses[i]).renderPasses)
@@ -2013,7 +2037,20 @@ namespace vkrg
                 }
             }
         }
-        
+        */
+
+        for (auto mergedPassIter = m_MergedRenderPassGraph.Begin(); mergedPassIter != m_MergedRenderPassGraph.End(); mergedPassIter++)
+        {
+            //for (auto renderPassNode : (*m_MergedRenderPasses[i]).renderPasses)
+            for (uint32_t subpassIdx = 0; subpassIdx < mergedPassIter->renderPasses.size(); subpassIdx++)
+            {
+                auto renderPassNode = mergedPassIter->renderPasses[subpassIdx];
+                if (renderPassNode == node)
+                {
+                    return std::make_tuple(mergedPassIter, subpassIdx);
+                }
+            }
+        }
         return std::nullopt;
     }
 
@@ -2072,6 +2109,19 @@ namespace vkrg
         
         
         return std::make_tuple(w, h, d);
+    }
+
+    uint32_t RenderGraph::GetRenderGraphPassInfoIndex(DAGMergedNode node)
+    {
+        for (uint32_t i = 0;i < m_renderGraphPassInfo.size(); i++)
+        {
+            if (m_renderGraphPassInfo[i].targetMergedPassIdx == node.GetId())
+            {
+                return i;
+            }
+        }
+
+        return m_renderGraphPassInfo.size();
     }
 
     static bool Contains(uint32_t src, uint32_t target)
@@ -2162,6 +2212,8 @@ namespace vkrg
 
     bool RenderGraph::CheckBufferUsageCompability(VkFormat format, VkBufferUsageFlags usage)
     {
+        if (format == VK_FORMAT_UNDEFINED) return true;
+
         if (format > ResourceFormatCompabilityCache::supportedFormatCount)
         {
             return false;

@@ -1,3 +1,5 @@
+#ifndef CAMERA_GLSLI
+#define CAMERA_GLSLI
 
 struct Object
 {
@@ -14,7 +16,14 @@ struct Camera
     vec3 cameraPosition;
 };
 
+#ifndef MAX_LIGHT_COUNT
 #define MAX_LIGHT_COUNT 16
+#endif
+
+
+#ifndef LIGHT_TYPE_NULL
+#define LIGHT_TYPE_NULL -1
+#endif
 
 #ifndef LIGHT_TYPE_POINT
 #define LIGHT_TYPE_POINT 0
@@ -40,3 +49,5 @@ struct Lights
 #define perMaterial set = 1
 #define perCamera set = 2
 #define perDraw set = 3
+
+#endif

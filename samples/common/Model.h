@@ -41,6 +41,18 @@
 
 namespace vkglTF
 {
+	struct BoundingBox
+	{
+		glm::vec3 upper;
+		glm::vec3 lower;
+
+		BoundingBox() :upper(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min()),
+			lower(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max()) {}
+
+		void Merge(glm::vec3 pt);
+	};
+
+
 	inline constexpr uint32_t perObjectBindingIndex = 0;
 	inline constexpr uint32_t perMaterialBindingIndex = 1;
 	inline constexpr uint32_t perCameraBindingIndex = 2;
@@ -270,9 +282,11 @@ namespace vkglTF
 		void createEmptyTexture(gvk::ptr<gvk::Context> ctx,gvk::ptr<gvk::CommandQueue> queue);
 
 		gvk::ptr<gvk::Pipeline> targetPipeline;
+		BoundingBox boundBox;
 
 		void createDescriptorSetForAllMaterials(gvk::ptr<gvk::DescriptorAllocator> alloc, gvk::ptr<gvk::DescriptorSetLayout> layout);
 		void createDescriptorSetForAllNodes(gvk::ptr<gvk::DescriptorAllocator> alloc, gvk::ptr<gvk::DescriptorSetLayout> layout);
+
 	public:
 		gvk::ptr<gvk::Context> ctx;
 
@@ -325,6 +339,8 @@ namespace vkglTF
 		
 		Node* findNode(Node* parent, uint32_t index);
 		Node* nodeFromIndex(uint32_t index);
+
+		BoundingBox GetBox();
 		// void prepareNodeDescriptor(vkglTF::Node* node, VkDescriptorSetLayout descriptorSetLayout);
 	};
 }
