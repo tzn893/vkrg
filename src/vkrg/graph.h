@@ -356,7 +356,7 @@ namespace vkrg
 				union 
 				{
 					VkImageView imageView;
-					VkBufferView bufferView;
+					BufferView bufferView;
 				};
 				bool isImage;
 			};

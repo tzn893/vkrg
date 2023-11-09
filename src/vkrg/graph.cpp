@@ -1697,11 +1697,11 @@ namespace vkrg
                                 targetBufferIndex = 0;
                             }
 
-                            auto bufferView = binding->buffers[targetBufferIndex]->CreateBufferView(attachment.range.bufferRange.size, attachment.range.bufferRange.offset);
-                            vkrg_assert(bufferView.has_value());
-
                             RenderPassViewTable::View view;
-                            view.bufferView = bufferView.value();
+                            view.bufferView.buffer = binding->buffers[targetBufferIndex]->GetBuffer();
+                            view.bufferView.size = attachment.range.bufferRange.size;
+                            view.bufferView.offset = attachment.range.bufferRange.offset;
+
                             view.isImage = false;
 
                             m_RPViewTable[passIdx].attachmentViews[frameIdx][attachmentIdx] = view;

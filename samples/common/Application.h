@@ -7,7 +7,7 @@ using namespace vkrg;
 class Application
 {
 public:
-	Application(uint32_t width, uint32_t height, bool async);
+	Application(uint32_t width, uint32_t height, bool async, GVK_DEVICE_EXTENSION* extraExtensions = NULL, uint32_t extraExtensionCnt = 0);
 
 	void Run();
 
@@ -50,4 +50,6 @@ protected:
 	float sensitive = 30.0f;
 	
 	VkFormat m_BackBufferFormat;
+
+	std::vector<GVK_DEVICE_EXTENSION> m_Extensions;
 };

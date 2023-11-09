@@ -110,8 +110,8 @@ private:
 class TileCulling : public RenderPassInterface
 {
 public:
-	TileCulling(RenderPass* pass, RenderPassAttachment cullingResult,gvk::ptr<gvk::DescriptorSet> cullingDescriptor, DeferredApplication* app) :
-		RenderPassInterface(pass), cullingResult(cullingResult), app(app), cullingDescriptor(cullingDescriptor) {}
+	TileCulling(RenderPass* pass, RenderPassAttachment cullingResult, DeferredApplication* app) :
+		RenderPassInterface(pass), cullingResult(cullingResult), app(app) {}
 
 	virtual void OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd) override;
 	
@@ -121,7 +121,6 @@ public:
 	}
 
 private:
-	gvk::ptr<gvk::DescriptorSet> cullingDescriptor;
 
 	RenderPassAttachment cullingResult;
 	DeferredApplication* app;
@@ -172,7 +171,7 @@ public:
 
 			auto cullingResult = tileCullingHandle.pass->AddBufferStorageOutput("cullingResult", slice).value();
 
-			CreateRenderPassInterface<TileCulling>(tileCullingHandle.pass.get(), cullingResult, tileCullingDescriptor, this);
+			CreateRenderPassInterface<TileCulling>(tileCullingHandle.pass.get(), cullingResult, this);
 		}
 
 		{
@@ -284,16 +283,16 @@ public:
 	{
 		screenData.resolution.x = windowWidth;
 		screenData.resolution.y = windowHeight;
-		screenData.resolution.z = 1 / windowHeight;
-		screenData.resolution.w = 1 / windowWidth;
+		screenData.resolution.z = 1.0f / (float)windowHeight;
+		screenData.resolution.w = 1.0f / (float)windowWidth;
 
 		screenData.tileCount.x = (windowWidth + TILE_SIZE - 1) / TILE_SIZE;
 		screenData.tileCount.y = (windowHeight + TILE_SIZE - 1) / TILE_SIZE;
 		screenData.tileCount.z = 1 / screenData.tileCount.x;
 		screenData.tileCount.w = 1 / screenData.tileCount.y;
 
-		screenBuffer = context->CreateBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(lightData), GVK_HOST_WRITE_SEQUENTIAL).value();
-		screenBuffer->Write(&lightData, 0, sizeof(lightData));
+		screenBuffer = context->CreateBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(Screen), GVK_HOST_WRITE_SEQUENTIAL).value();
+		screenBuffer->Write(&screenData, 0, sizeof(screenData));
 
 		std::string error;
 		const char* include_directorys[] = { VKRG_SHADER_DIRECTORY };
@@ -302,7 +301,7 @@ public:
 			include_directorys, gvk_count_of(include_directorys),
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
-		auto deferredShadingFrag = context->CompileShader("multi_deferred.frag", gvk::ShaderMacros(),
+		auto deferredShadingFrag = context->CompileShader("tile_deferred.frag", gvk::ShaderMacros(),
 			include_directorys, gvk_count_of(include_directorys),
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
@@ -462,7 +461,7 @@ void MyDeferredShading::OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer 
 
 	if (ctx.CheckAttachmentDirtyFlag(cullingResult))
 	{
-		BufferAttachment cullingResultBuffer = ctx.GetBufferAttachment(cullingResult);
+		BufferView cullingResultBuffer = ctx.GetBufferAttachment(cullingResult);
 		GvkDescriptorSetWrite()
 		.BufferWrite(app->shadingPerDrawDescriptor, "cullingResult", 
 			cullingResultBuffer.buffer, 
@@ -509,19 +508,18 @@ void TileCulling::OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd)
 {
 	if (ctx.CheckAttachmentDirtyFlag(cullingResult))
 	{
-		BufferAttachment cullingResultBuffer = ctx.GetBufferAttachment(cullingResult);
+		BufferView cullingResultBuffer = ctx.GetBufferAttachment(cullingResult);
 
 		GvkDescriptorSetWrite()
-		.BufferWrite(cullingDescriptor, "cullingResult", cullingResultBuffer.buffer, cullingResultBuffer.offset, cullingResultBuffer.size)
+		.BufferWrite(app->tileCullingDescriptor, "cullingResult", cullingResultBuffer.buffer, cullingResultBuffer.offset, cullingResultBuffer.size)
 		.Emit(app->context->GetDevice());
 	}
 
+	GvkBindPipeline(cmd, app->tileCullingPipeline);
+	
 	GvkDescriptorSetBindingUpdate(cmd, app->tileCullingPipeline)
 	.BindDescriptorSet(app->tileCullingDescriptor)
 	.Update();
 
-	uint32_t dispatchCountX = (((uint32_t)app->screenData.tileCount.x) + TILE_SIZE - 1) / TILE_SIZE;
-	uint32_t dispatchCountY = (((uint32_t)app->screenData.tileCount.y) + TILE_SIZE - 1) / TILE_SIZE;
-
-	vkCmdDispatch(cmd, dispatchCountX, dispatchCountY, 1);
+	vkCmdDispatch(cmd, (uint32_t)app->screenData.tileCount.x, (uint32_t)app->screenData.tileCount.y, 1);
 }

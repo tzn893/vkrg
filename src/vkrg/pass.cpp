@@ -481,26 +481,14 @@ namespace vkrg {
 		return view.imageView;
 	}
 
-	BufferAttachment RenderPassRuntimeContext::GetBufferAttachment(RenderPassAttachment attachment)
+	BufferView RenderPassRuntimeContext::GetBufferAttachment(RenderPassAttachment attachment)
 	{
 		vkrg_assert(attachment.targetPass == m_Graph->m_RenderPassList[m_passIdx].pass.get());
 
-		auto& logicalResource = attachment.targetPass->m_AttachmentResourceHandle[attachment.idx];
-		auto& logicalResourceAssignment = m_Graph->m_LogicalResourceAssignmentTable[logicalResource.idx];
+		auto& view = m_Graph->m_RPViewTable[m_passIdx].attachmentViews[m_FrameIdx][attachment.idx];
+		vkrg_assert(!view.isImage);
 
-		vkrg_assert(m_Graph->m_LogicalResourceList[logicalResource.idx].info.IsBuffer());
-
-		RenderGraph::ResourceBindingInfo* binding = NULL;
-		if (logicalResourceAssignment.external)
-		{
-			binding = &m_Graph->m_PhysicalResourceBindings[logicalResourceAssignment.idx];
-		}
-		else
-		{
-			binding = &m_Graph->m_ExternalResourceBindings[logicalResourceAssignment.idx];
-		}
-
-		return BufferAttachment{ binding->buffers[m_FrameIdx]->GetBuffer(), attachment.range.bufferRange.offset, attachment.range.bufferRange.size};
+		return view.bufferView;
 	}
 
 

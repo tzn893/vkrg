@@ -9,14 +9,14 @@ layout (perCamera, binding = 0) uniform CameraUBO
 
 layout(perDraw, binding = 0) buffer CullingResult
 {
-    // currently we assume maximun screen resolution is 1920x1080
+    // currently we assume maximun screenUBO resolution is 1920x1080
     TileLighting tileLighting[8100];
 } cullingResult;
 
 layout(perDraw, binding = 1) uniform ScreenUBO
 {
     Screen ubo;
-} screen;
+} screenUBO;
 
 layout (perMaterial, binding = 0) uniform sampler2D colorSampler;
 layout (perMaterial, binding = 1) uniform sampler2D materialSampler;
@@ -160,7 +160,7 @@ vec3 ComputePBR(PBRParameter param, Light light)
 // ----------------------------------------------------------------------------
 void main()
 {		  
-	TileLighting lights = cullingResult.tileLighting[GetTileIdx(screen.ubo, inUV)];
+	TileLighting lights = cullingResult.tileLighting[GetTileIdx(screenUBO.ubo, inUV)];
 
 	PBRParameter param = GetPbrParameter();
 	// Specular contribution

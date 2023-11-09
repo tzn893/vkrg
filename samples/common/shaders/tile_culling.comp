@@ -1,6 +1,8 @@
 #version 450
 #include "tile.glsli"
 
+#extension GL_EXT_debug_printf : enable
+
 #define TRUE (1)
 #define FALSE (0)
 
@@ -33,11 +35,11 @@ layout(set = 0, binding = 1) uniform CameraUBO
 layout(set = 0, binding = 2) uniform ScreenUBO
 {
     Screen ubo;
-} screen;
+} screenUBO;
 
 layout(set = 0, binding = 3) buffer CullingResult
 {
-    // currently we assume maximun screen resolution is 1920x1080
+    // currently we assume maximun screenUBO resolution is 1920x1080
     TileLighting tileLighting[8100];
 } cullingResult;
 
@@ -81,8 +83,8 @@ Frustrum computeFrustrum()
     mat4  m = cameraUBO.camera.projection * cameraUBO.camera.view;
     uvec2 groudID = gl_WorkGroupID.xy;
 
-    float x_tile_size = 2 * screen.ubo.tileCount.z;
-    float y_tile_size = 2 * screen.ubo.tileCount.w;
+    float x_tile_size = 2 * screenUBO.ubo.tileCount.z;
+    float y_tile_size = 2 * screenUBO.ubo.tileCount.w;
 
     // ndc coordinate
     float u_tile = groudID.x * x_tile_size - 1;
@@ -117,7 +119,7 @@ shared int   lightCount;
 void main()
 {
     ivec2 groupID = ivec2(gl_WorkGroupID.xy);
-    int tileIdx = int(screen.ubo.tileCount.x) * groupID.y + groupID.x;
+    int tileIdx = int(screenUBO.ubo.tileCount.x) * groupID.y + groupID.x;
 
     // TODO 实现计算当前tile对应的frustrum
     Frustrum frustrum = computeFrustrum();

@@ -1,9 +1,12 @@
 #include "Application.h"
 
-Application::Application(uint32_t width, uint32_t height, bool async)
+Application::Application(uint32_t width, uint32_t height, bool async, GVK_DEVICE_EXTENSION* extraExtensions, uint32_t extraExtensionCnt)
 	:windowWidth(width), windowHeight(height), async(async), m_Camera(width, height, cameraPos, cameraFront)
 {
-
+	for (uint32_t i = 0;i < extraExtensionCnt; i++)
+	{
+		m_Extensions.push_back(extraExtensions[i]);
+	}
 }
 
 void Application::Run()

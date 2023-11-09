@@ -90,7 +90,7 @@ namespace vkrg
 	};
 
 	
-	struct BufferAttachment
+	struct BufferView
 	{
 		VkBuffer buffer;
 		uint64_t offset;
@@ -103,7 +103,7 @@ namespace vkrg
 		RenderPassRuntimeContext(RenderGraph* graph, uint32_t frameIdx, uint32_t passIdx);
 		
 		VkImageView GetImageAttachment(RenderPassAttachment attachment);
-		BufferAttachment GetBufferAttachment(RenderPassAttachment attachment);
+		BufferView GetBufferAttachment(RenderPassAttachment attachment);
 
 		bool		CheckAttachmentDirtyFlag(RenderPassAttachment attachment);
 	
