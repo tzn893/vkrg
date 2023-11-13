@@ -1,5 +1,6 @@
 #version 450
 #include "tile.glsli"
+#include "light.glsli"
 
 #extension GL_EXT_debug_printf : enable
 
@@ -13,13 +14,6 @@
 #define TILE_STRIDE (TILE_SIZE * TILE_SIZE)
 
 layout (local_size_x = TILE_SIZE,local_size_y = TILE_SIZE) in;
-
-struct Frustrum
-{
-    // (x, y, z): normal of one frustrum plane
-    // w: distance frustrum plane from original
-    vec4 plane[6];
-};
 
 layout(set = 0, binding = 0) uniform LightUBO
 {
@@ -43,19 +37,15 @@ layout(set = 0, binding = 3) buffer CullingResult
     TileLighting tileLighting[8100];
 } cullingResult;
 
-vec4 computeLightBoundingSphere(Light light, out int culled)
+vec4 computeLightBoundingSphere(Light light)
 {
-    const float minimunIntensity = 0.05;
-    float grayScale = dot(light.intensity.xyz, vec3(0.2126, 0.7152, 0.0722)) / minimunIntensity;
-
-    culled = int(step(grayScale, 1));
-    float r = sqrt(max(grayScale - 1, 0.0));
-    
+    float r = light.intensity.w;
     return vec4( light.vec.xyz, r);
 }   
 
 int frustrumSphereIntersection(Frustrum frustrum, vec4 sphere)
 {
+
     vec3  sphereOrigin = sphere.xyz;
     float sphereRadius = sphere.w;
 
@@ -81,43 +71,33 @@ Frustrum computeFrustrum()
 {
     // reference https://zhuanlan.zhihu.com/p/491340245
     mat4  m = cameraUBO.camera.projection * cameraUBO.camera.view;
-    uvec2 groudID = gl_WorkGroupID.xy;
+    uvec2 groupID = gl_WorkGroupID.xy;
 
     float x_tile_size = 2 * screenUBO.ubo.tileCount.z;
     float y_tile_size = 2 * screenUBO.ubo.tileCount.w;
 
     // ndc coordinate
-    float u_tile = groudID.x * x_tile_size - 1;
+    float u_tile = groupID.x * x_tile_size - 1;
     float u_tile_1 = u_tile + x_tile_size;
 
-    float v_tile = groudID.y * y_tile_size - 1;
+    float v_tile = groupID.y * y_tile_size - 1;
     float v_tile_1 = v_tile + y_tile_size;
-
-    vec4 right  = vec4(u_tile_1 *   m[3][0] - m[0][0], u_tile_1 *   m[3][1] - m[0][1], u_tile_1 *   m[3][2] - m[0][2], u_tile_1 *   m[3][3] - m[0][3]);
-    vec4 up     = vec4(v_tile_1 *   m[3][0] - m[1][0], v_tile_1 *   m[3][1] - m[1][1], v_tile_1 *   m[3][2] - m[1][2], v_tile_1 *   m[3][3] - m[1][3]);
-    vec4 front  = vec4(/*1 **/      m[3][0] - m[2][0], /*1 **/      m[3][1] - m[2][1], /*1 **/      m[3][2] - m[2][2], /*1 **/      m[3][3] - m[2][3]);
     
-    vec4 left   = vec4( m[0][0] - u_tile * m[3][0], m[0][1] - u_tile * m[3][1], m[0][2] - u_tile * m[3][2], m[0][3] - u_tile * m[3][3]);
-    vec4 down   = vec4( m[1][0] - v_tile * m[3][0], m[1][1] - v_tile * m[3][1], m[1][2] - v_tile * m[3][2], m[1][3] - v_tile * m[3][3]);
-    vec4 back   = vec4( m[2][0]/* - 0 * m[3][0] */, m[2][1]/* - 0 * m[3][1] */, m[2][2]/*-  0 * m[3][2] */, m[2][3]/* - 0 * m[3][3] */);
-    
-    Frustrum frustrum;
-    frustrum.plane[0] = right;
-    frustrum.plane[1] = left;
-    frustrum.plane[2] = up;
-    frustrum.plane[3] = down;
-    frustrum.plane[4] = front;
-    frustrum.plane[5] = back;
+    Frustrum frustrum = ComputeCameraFrustrum(u_tile, u_tile_1, v_tile, v_tile_1, 0, 1, cameraUBO.camera);
 
     return frustrum;
 }
 
 
-shared Light lights[15];
+
+shared Light lights[TILE_MAX_LIGHT_COUNT];
 shared int   lightCount;
 
 void main()
 {
+    lightCount = 0;
+    barrier();
+
     ivec2 groupID = ivec2(gl_WorkGroupID.xy);
     int tileIdx = int(screenUBO.ubo.tileCount.x) * groupID.y + groupID.x;
 
@@ -125,42 +105,41 @@ void main()
     Frustrum frustrum = computeFrustrum();
     int threadIdx = int(gl_LocalInvocationID.x)  + int(gl_LocalInvocationID.y) * TILE_SIZE; 
 
+    
     // 并行的对当前tile以及所有Light做剔除
     for(int i = threadIdx; i < lightUBO.count; i += TILE_STRIDE)
     {
-        Light light = lights[i];
+        Light light = lightUBO.lights[i];
 
         if(light.vec.w == LIGHT_TYPE_DIRECT)
         {
             continue;
         }
 
-        int culled = FALSE;
-        vec4 sphere = computeLightBoundingSphere(light, culled);
-
-        if(culled == TRUE)
-        {
-            continue;
-        }
+        vec4 sphere = computeLightBoundingSphere(light);
 
         if(frustrumSphereIntersection(frustrum, sphere) == TRUE)
         {
             int lightIdx = atomicAdd(lightCount, 1);
-            lights[lightIdx] = light;
+            if(lightIdx < TILE_MAX_LIGHT_COUNT)
+            {
+                lights[lightIdx] = light;
+            }
+
         }
+
     }
 
     barrier();
 
+    //lightCount = min(lightCount, TILE_MAX_LIGHT_COUNT);
+
     // 将剔除结果加到culling result中
     if(gl_LocalInvocationID.x != 0 || gl_LocalInvocationID.y != 0) return;
 
-    TileLighting tlight;
     for(int i  = 0; i < lightCount; i++)
     {
-        tlight.lights[i] = lights[i];
+        cullingResult.tileLighting[tileIdx].lights[i] = lights[i];
     }
-    tlight.lightCount.x = lightCount;
-
-    cullingResult.tileLighting[tileIdx] = tlight;
+    cullingResult.tileLighting[tileIdx].lightCount.x = lightCount;
 }

@@ -1,5 +1,6 @@
 #version 450
 #include "tile.glsli"
+#include "light.glsli"
 
 layout (location = 0) in vec2 inUV;
 layout (perCamera, binding = 0) uniform CameraUBO
@@ -68,22 +69,6 @@ PBRParameter GetPbrParameter()
 	param.P = position.xyz;
 
 	return param;
-}
-
-vec3 GetL(Light light, vec3 position, out vec3 intensity)
-{
-	int lightType = int(light.vec.w);
-	if(lightType == LIGHT_TYPE_DIRECT)
-	{
-		intensity = light.intensity.xyz;
-		return -normalize(light.vec.xyz);
-	}
-	else
-	{
-		vec3 diff = light.vec.xyz - position;
-		intensity = light.intensity.xyz / (1 + dot(diff, diff));
-		return normalize(diff);
-	}
 }
 
 // Normal Distribution function --------------------------------------
@@ -160,17 +145,19 @@ vec3 ComputePBR(PBRParameter param, Light light)
 // ----------------------------------------------------------------------------
 void main()
 {		  
-	TileLighting lights = cullingResult.tileLighting[GetTileIdx(screenUBO.ubo, inUV)];
+
+	int tileIdx = GetTileIdx(screenUBO.ubo, inUV);
 
 	PBRParameter param = GetPbrParameter();
 	// Specular contribution
 	vec3 Lo = vec3(0.0);
-	for (int i = 0; i < lights.lightCount.x; i++) {
-		Lo += ComputePBR(param ,lights.lights[i]);
+	int lightCount = min(int(cullingResult.tileLighting[tileIdx].lightCount.x), TILE_MAX_LIGHT_COUNT);
+	for (int i = 0; i < lightCount; i++) {
+		Lo += ComputePBR(param ,cullingResult.tileLighting[tileIdx].lights[i]);
 	};
 
 	// Combine with ambient
-	vec3 color = param.albedo * 0.02;
+	vec3 color = param.albedo * 0.2;
 	color += Lo;
 
 	// Gamma correct

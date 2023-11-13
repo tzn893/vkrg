@@ -1,11 +1,16 @@
 #include "Application.h"
 
-Application::Application(uint32_t width, uint32_t height, bool async, GVK_DEVICE_EXTENSION* extraExtensions, uint32_t extraExtensionCnt)
+Application::Application(uint32_t width, uint32_t height, bool async, GVK_DEVICE_EXTENSION* extraExtensions, uint32_t extraExtensionCnt,
+	GVK_INSTANCE_EXTENSION* extraInstanceExtensions, uint32_t extraInstanceExtensionCnt)
 	:windowWidth(width), windowHeight(height), async(async), m_Camera(width, height, cameraPos, cameraFront)
 {
 	for (uint32_t i = 0;i < extraExtensionCnt; i++)
 	{
-		m_Extensions.push_back(extraExtensions[i]);
+		m_DeviceExtensions.push_back(extraExtensions[i]);
+	}
+	for (uint32_t i = 0;i < extraInstanceExtensionCnt; i++)
+	{
+		m_InstanceExtensions.push_back(extraInstanceExtensions[i]);
 	}
 }
 
@@ -144,11 +149,21 @@ bool Application::InitializeContext()
 	instance_create.AddLayer(GVK_LAYER_DEBUG);
 	instance_create.AddLayer(GVK_LAYER_FPS_MONITOR);
 
+	for (uint32_t i = 0;i < m_InstanceExtensions.size(); i++)
+	{
+		instance_create.AddInstanceExtension(m_InstanceExtensions[i]);
+	}
+
 	context->InitializeInstance(instance_create, &error);
 
 	GvkDeviceCreateInfo device_create;
 	device_create.AddDeviceExtension(GVK_DEVICE_EXTENSION_SWAP_CHAIN);
 	device_create.RequireQueue(VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, 1);
+
+	for (uint32_t i = 0;i < m_DeviceExtensions.size();i++)
+	{
+		device_create.AddDeviceExtension(m_DeviceExtensions[i]);
+	}
 
 	context->InitializeDevice(device_create, &error);
 	

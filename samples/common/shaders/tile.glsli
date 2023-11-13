@@ -2,12 +2,17 @@
 #define TILE_GLSLI
 
 #include "camera.glsli"
+#include "light.glsli"
+
+#ifndef TILE_MAX_LIGHT_COUNT
+#define TILE_MAX_LIGHT_COUNT 127
+#endif
 
 struct TileLighting
 {
     ivec4 lightCount;
     vec4  padding;
-    Light lights[15];
+    Light lights[TILE_MAX_LIGHT_COUNT];
 };
 
 struct Screen 
@@ -20,8 +25,9 @@ struct Screen
 
 int GetTileIdx(Screen screen, vec2 uv)
 {
-	int x_tile_idx = int(uv.x / screen.tileCount.z);
-	int y_tile_idx = int(uv.y / screen.tileCount.w);
+    // uv.y = 1 - uv.y;
+	int x_tile_idx = int(uv.x * screen.tileCount.x);
+	int y_tile_idx = int(uv.y * screen.tileCount.y);
 
 	return y_tile_idx * int(screen.tileCount.x) + x_tile_idx;
 }

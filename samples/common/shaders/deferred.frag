@@ -1,5 +1,6 @@
 #version 450
 #include "camera.glsli"
+#include "light.glsli"
 
 layout (location = 0) in vec2 inUV;
 layout (perCamera, binding = 0) uniform CameraUBO
@@ -64,21 +65,7 @@ PBRParameter GetPbrParameter()
 	return param;
 }
 
-vec3 GetL(Light light, vec3 position, out vec3 intensity)
-{
-	int lightType = int(light.vec.w);
-	if(lightType == LIGHT_TYPE_DIRECT)
-	{
-		intensity = light.intensity.xyz;
-		return -normalize(light.vec.xyz);
-	}
-	else
-	{
-		vec3 diff = light.vec.xyz - position;
-		intensity = light.intensity.xyz / (1 + dot(diff, diff));
-		return normalize(diff);
-	}
-}
+
 
 // Normal Distribution function --------------------------------------
 float D_GGX(float dotNH, float roughness)

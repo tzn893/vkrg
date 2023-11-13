@@ -1,0 +1,60 @@
+#ifndef LIGHT_GLSLI
+#define LIGHT_GLSLI
+
+#ifndef MAX_LIGHT_COUNT
+#define MAX_LIGHT_COUNT 16
+#endif
+
+
+#ifndef LIGHT_TYPE_NULL
+#define LIGHT_TYPE_NULL -1
+#endif
+
+#ifndef LIGHT_TYPE_POINT
+#define LIGHT_TYPE_POINT 0
+#endif
+
+#ifndef LIGHT_TYPE_DIRECT
+#define LIGHT_TYPE_DIRECT 1
+#endif
+
+struct Light
+{
+    vec4 intensity;
+    vec4 vec;
+};
+
+struct Lights
+{
+    Light lights[MAX_LIGHT_COUNT];
+    int count;
+};
+
+
+vec3 GetL(Light light, vec3 position, out vec3 intensity)
+{
+	int lightType = int(light.vec.w);
+	if(lightType == LIGHT_TYPE_DIRECT)
+	{
+		intensity = light.intensity.xyz;
+		return -normalize(light.vec.xyz);
+	}
+	else
+	{
+		vec3 diff = light.vec.xyz - position;
+		intensity = light.intensity.xyz / (1 + dot(diff, diff));
+		if(length(diff) < light.intensity.w)
+		{
+			//intensity = vec3(0, 0, 0);
+			intensity *= 1;
+		}
+		else
+		{
+			intensity *= 0;
+		}
+		
+		return normalize(diff);
+	}
+}
+
+#endif

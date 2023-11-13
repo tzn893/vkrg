@@ -40,11 +40,13 @@ struct Screen
 	glm::vec4  tileCount;
 };
 
+constexpr int MAX_TILE_LIGHT = 127;
+
 struct TileLighting
 {
 	ivec4 lightCount;
 	vec4  padding;
-	Light lights[15];
+	Light lights[MAX_TILE_LIGHT];
 };
 
 struct CullingResult
@@ -52,9 +54,7 @@ struct CullingResult
 	TileLighting tileLighting[8100];
 };
 
-
-
-inline Light MakeLight(int lightType, glm::vec3 vec, glm::vec3 intensity)
+inline Light MakeLight(int lightType, glm::vec3 vec, glm::vec3 intensity, float radius)
 {
 	Light light;
 	glm::vec4 lvec;
@@ -62,9 +62,10 @@ inline Light MakeLight(int lightType, glm::vec3 vec, glm::vec3 intensity)
 	lvec.x = vec.x, lvec.y = vec.y, lvec.z = vec.z;
 
 	light.vec = lvec;
-	light.intensity = glm::vec4(intensity.x, intensity.y, intensity.z, 1);
+	light.intensity = glm::vec4(intensity.x, intensity.y, intensity.z, radius);
 	return light;
 }
+
 
 class DeferredApplication;
 
@@ -126,6 +127,8 @@ private:
 	DeferredApplication* app;
 };
 
+
+
 class DeferredApplication : public Application
 {
 	friend class MyDeferredPass;
@@ -133,8 +136,8 @@ class DeferredApplication : public Application
 	friend class TileCulling;
 public:
 
-	DeferredApplication(uint32_t width, uint32_t height)
-		:Application(width, height, false)
+	DeferredApplication(uint32_t width, uint32_t height, GVK_DEVICE_EXTENSION* exts, uint32_t extCnt, GVK_INSTANCE_EXTENSION* instances, uint32_t instCnt)
+		:Application(width, height, false, exts, extCnt, instances, instCnt)
 	{}
 
 	virtual void CreateRenderGraph() override
@@ -248,18 +251,18 @@ public:
 	{
 		glm::vec4 vec;
 		vec.w = LIGHT_TYPE_POINT;
-		lightData.count = MAX_LIGHT_COUNT;
+		lightData.count = GRID_COUNT * GRID_COUNT * 4;
 
 		vkglTF::BoundingBox box = model.GetBox();
 
 		float x_grid = (box.upper.x - box.lower.x) / GRID_COUNT;
 		float z_grid = (box.upper.z - box.lower.z) / GRID_COUNT;
-		float y_grid = (box.upper.y - box.upper.y) / GRID_COUNT;
+		float y_grid = (box.upper.y - box.lower.y) / GRID_COUNT * 3;
 
 		sizeof(Light);
 
 		glm::vec3 lower = box.lower;
-		for (uint32_t y = 0; y < GRID_HEIGHT; y++)
+		for (uint32_t y = 0; y < 4; y++)
 		{
 			for (uint32_t z = 0; z < GRID_COUNT; z++)
 			{
@@ -271,12 +274,22 @@ public:
 					{
 						break;
 					}
-					glm::vec3 pos = lower + glm::vec3(x * x_grid, y * y_grid, z * z_grid);
-					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos + glm::vec3(0, 1, 0), glm::vec3(0.1, 0.1, 0.1));
+					glm::vec3 pos = lower + glm::vec3(x * x_grid, 1 + y_grid * y, z * z_grid);
+					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos, glm::vec3(1, 1, 1) * 4.5f, 1);
 				}
 			}
 		}
 
+		/*
+		glm::vec4 vec;
+		vec.w = LIGHT_TYPE_POINT;
+
+		lightData.count = 1;
+		lightData.lights[0] = MakeLight(LIGHT_TYPE_POINT, glm::vec3(0, 1, 0), glm::vec3(10, 10, 10), 1.5);
+		*/
+
+		//lightData.count = 1;
+		//lightData.lights[0] = MakeLight(LIGHT_TYPE_POINT, glm::vec3(0, 0.1, 0), glm::vec3(1, 1, 1));
 	}
 
 	virtual bool CustomInitialize() override
@@ -296,12 +309,13 @@ public:
 
 		std::string error;
 		const char* include_directorys[] = { VKRG_SHADER_DIRECTORY };
+		std::string maxTileLightStr = std::to_string(MAX_TILE_LIGHT);
 
 		auto deferredShadingVert = context->CompileShader("deferred.vert", gvk::ShaderMacros(),
 			include_directorys, gvk_count_of(include_directorys),
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
-		auto deferredShadingFrag = context->CompileShader("tile_deferred.frag", gvk::ShaderMacros(),
+		auto deferredShadingFrag = context->CompileShader("tile_deferred.frag", gvk::ShaderMacros().D("MAX_TILE_LIGHT", maxTileLightStr.c_str()),
 			include_directorys, gvk_count_of(include_directorys),
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
@@ -314,7 +328,7 @@ public:
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
 
-		auto tileCullingComp = context->CompileShader("tile_culling.comp", gvk::ShaderMacros(),
+		auto tileCullingComp = context->CompileShader("tile_culling.comp", gvk::ShaderMacros().D("MAX_TILE_LIGHT", maxTileLightStr.c_str()),
 			include_directorys, gvk_count_of(include_directorys),
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
@@ -489,8 +503,6 @@ bool MyDeferredShading::OnValidationCheck(std::string& msg)
 		return false;
 	}
 
-
-
 	return true;
 }
 
@@ -498,8 +510,11 @@ bool MyDeferredShading::OnValidationCheck(std::string& msg)
 
 int main()
 {
+
+	GVK_INSTANCE_EXTENSION extraInstances[] = {GVK_INSTANCE_EXTENSION_SHADER_PRINT};
+
 	constexpr uint32_t initWidth = 800, initHeight = 800;
-	std::make_shared<DeferredApplication>(initWidth, initHeight)->Run();
+	std::make_shared<DeferredApplication>(initWidth, initHeight, (GVK_DEVICE_EXTENSION*)NULL, 0, extraInstances, gvk_count_of(extraInstances))->Run();
 
 	return 0;
 }

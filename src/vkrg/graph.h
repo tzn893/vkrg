@@ -210,6 +210,9 @@ namespace vkrg
 		void					ClearCompileCache();
 		void					PostCompile();
 
+
+		uint32_t				GetResourceFrameIdx(uint32_t idx,bool res);
+
 		RenderGraphCompileOptions m_Options;
 
 		std::unordered_map<std::string, uint32_t> m_LogicalResourceTable;
@@ -321,6 +324,8 @@ namespace vkrg
 			{
 				ptr<gvk::RenderPass>  renderPass;
 				std::vector<uint32_t> mergedSubpassIndices;
+
+				std::vector<RenderGraphBarrier> bufferBarriers;
 
 				std::vector<FBAttachment> fbAttachmentIdx;
 				std::vector<VkClearValue> fbClearValues;

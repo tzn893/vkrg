@@ -773,7 +773,6 @@ namespace vkrg
     {
         ImageLayoutStatus(ResourceInfo info) : info(info)
         {
-            if (info.IsBuffer())  return;
             subresourceLayouts.resize(info.channelCount * info.mipCount * GetAspectCount(info.format), VK_IMAGE_LAYOUT_UNDEFINED);
         }
 
@@ -955,7 +954,7 @@ namespace vkrg
 
         void AddImage(VkPipelineStageFlagBits srcStage, VkPipelineStageFlagBits dstStage, VkImageMemoryBarrier imgBarrier, RenderGraphBarrier::Handle handle)
         {
-            RenderGraphBarrier barrier = FindBarrier(srcStage, dstStage);
+            RenderGraphBarrier& barrier = FindBarrier(srcStage, dstStage);
             for (uint32_t i = 0;i < m_frameCount;i++)
             {
                 barrier.imageBarriers[i].push_back(imgBarrier);
@@ -964,7 +963,7 @@ namespace vkrg
         }
         void AddBuffer(VkPipelineStageFlagBits srcStage, VkPipelineStageFlagBits dstStage, VkBufferMemoryBarrier bufferBarrier, RenderGraphBarrier::Handle handle)
         {
-            RenderGraphBarrier barrier = FindBarrier(srcStage, dstStage);
+            RenderGraphBarrier& barrier = FindBarrier(srcStage, dstStage);
 
             for (uint32_t i = 0; i < m_frameCount; i++)
             {
@@ -1168,6 +1167,7 @@ namespace vkrg
                         auto& attachment = attachments[attachmentIdx];
                         
                         // skip the buffer resources
+                        // TODO barrier for buffer resource
                         if (m_LogicalResourceList[resource.idx].info.IsBuffer()) continue;
 
                         // if the resource is a external resource
@@ -1361,7 +1361,48 @@ namespace vkrg
                             }
                         }
                     }
-                    //
+                    
+                    // tranverse every attachment, collect all buffer barriers
+                    for (uint32_t attachmentIdx = 0; attachmentIdx != attachments.size(); attachmentIdx++)
+                    {
+                        auto& resource = resources[attachmentIdx];
+                        auto& attachment = attachments[attachmentIdx];
+
+                        if (!attachment.IsBuffer()) continue;
+
+                        VkBufferMemoryBarrier barrier{};
+                        barrier.offset = attachment.range.bufferRange.offset;
+                        barrier.size = attachment.range.bufferRange.size;
+                        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+                        barrier.pNext = NULL;
+                        barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+                        barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+
+                        ResourceAssignment assign;
+                        assign = m_LogicalResourceAssignmentTable[resource.idx];
+
+                        RenderGraphBarrier::Handle handle;
+                        handle.idx = assign.idx;
+                        handle.external = assign.external;
+
+                        if (attachment.type == RenderPassAttachment::BufferStorageInput || attachment.type == RenderPassAttachment::BufferInput)
+                        {
+                            VkPipelineStageFlagBits srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
+                            auto& writer = m_LogicalResourceIODenpendencies[resource.idx].resourceWriteList[0];
+                            if (m_RenderPassList[writer].pass->GetType() == RenderPassType::Compute)
+                            {
+                                srcStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                            }
+                            else if (m_RenderPassList[writer].pass->GetType() == RenderPassType::Graphics)
+                            {
+                                srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+                            }
+
+                            // TODO better stage flag bit
+                            barrierHelper.AddBuffer(srcStage, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, barrier, handle);
+                        }
+                    }
                 }
 
                 info.render.fbAttachmentIdx = frameBufferAttachments;
@@ -1527,6 +1568,15 @@ namespace vkrg
             }
 
             info.targetMergedPassIdx = currentMergedPass.GetId();
+            
+            if (info.type == RenderPassType::Compute)
+            {
+                info.compute.barriers = barrierHelper.barriers;
+            }
+            else
+            {
+                info.render.bufferBarriers = barrierHelper.barriers;
+            }
 
             m_renderGraphPassInfo.push_back(info);
         }
@@ -1691,12 +1741,8 @@ namespace vkrg
                     {
                         if (attachment.IsBuffer())
                         {
-                            uint32_t targetBufferIndex = frameIdx;
-                            if (m_Options.disableFrameOnFlight && !resource.external)
-                            {
-                                targetBufferIndex = 0;
-                            }
-
+                            uint32_t targetBufferIndex = GetResourceFrameIdx(frameIdx, resource.external);
+                            
                             RenderPassViewTable::View view;
                             view.bufferView.buffer = binding->buffers[targetBufferIndex]->GetBuffer();
                             view.bufferView.size = attachment.range.bufferRange.size;
@@ -1708,11 +1754,7 @@ namespace vkrg
                         }
                         else if (attachment.IsImage())
                         {
-                            uint32_t targetImageIndex = frameIdx;
-                            if (m_Options.disableFrameOnFlight && !resource.external)
-                            {
-                                targetImageIndex = 0;
-                            }
+                            uint32_t targetImageIndex = GetResourceFrameIdx(frameIdx, resource.external);
 
                             auto imageView = binding->images[targetImageIndex]->CreateView(attachment.range.imageRange.aspectMask,
                                 attachment.range.imageRange.baseMipLevel,
@@ -1763,7 +1805,8 @@ namespace vkrg
                         {
                             for (uint32_t frameIdx = 0; frameIdx < m_Options.flightFrameCount; frameIdx++)
                             {
-                                barrier.bufferBarriers[frameIdx][i].buffer = binding->buffers[frameIdx]->GetBuffer();
+                                uint32_t targetBufferIdx = GetResourceFrameIdx(frameIdx, barrier.bufferBarrierHandles[i].external);
+                                barrier.bufferBarriers[frameIdx][i].buffer = binding->buffers[targetBufferIdx]->GetBuffer();
                             }
                         }
                     }
@@ -1783,7 +1826,8 @@ namespace vkrg
                         {
                             for (uint32_t frameIdx = 0; frameIdx < m_Options.flightFrameCount; frameIdx++)
                             {
-                                barrier.imageBarriers[frameIdx][i].image = binding->images[frameIdx]->GetImage();
+                                uint32_t targetImageIdx = GetResourceFrameIdx(frameIdx, barrier.imageBarrierHandles[i].external);
+                                barrier.imageBarriers[frameIdx][i].image = binding->images[targetImageIdx]->GetImage();
                             }
                         }
                     }
@@ -1852,6 +1896,31 @@ namespace vkrg
                         m_RPFrameBuffers[renderPassIdx].frameBuffer[frameIdx] = fb.value();
                     }
                 }
+
+                for (auto& barrier : passInfo.render.bufferBarriers)
+                {
+                    for (uint32_t i = 0; i < barrier.bufferBarriers[0].size(); i++)
+                    {
+                        ResourceBindingInfo* binding = NULL;
+                        if (barrier.bufferBarrierHandles[i].external)
+                        {
+                            binding = &m_ExternalResourceBindings[barrier.bufferBarrierHandles[i].idx];
+                        }
+                        else
+                        {
+                            binding = &m_PhysicalResourceBindings[barrier.bufferBarrierHandles[i].idx];
+                        }
+
+                        if (binding->dirtyFlag)
+                        {
+                            for (uint32_t frameIdx = 0; frameIdx < m_Options.flightFrameCount; frameIdx++)
+                            {
+                                uint32_t targetBufferIdx = GetResourceFrameIdx(frameIdx, barrier.bufferBarrierHandles[i].external);
+                                barrier.bufferBarriers[frameIdx][i].buffer = binding->buffers[targetBufferIdx]->GetBuffer();
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1881,6 +1950,17 @@ namespace vkrg
                 VkFramebuffer frameBuffer = m_RPFrameBuffers[passIdx].frameBuffer[frameIdx];
 
                 auto [w, h, _] = GetExpectedExtension(renderData.expectedExtension.extension, renderData.expectedExtension.extensionType);
+
+                auto& graphicsBarrier = m_renderGraphPassInfo[passIdx].render.bufferBarriers;
+                for (uint32_t barrierIdx = 0; barrierIdx < graphicsBarrier.size(); barrierIdx++)
+                {
+                    auto& barrier = graphicsBarrier[barrierIdx];
+                    vkrg_assert(barrier.imageBarriers[frameIdx].empty());
+
+                    vkCmdPipelineBarrier(cmd, barrier.srcStage, barrier.dstStage,
+                        0, 0, NULL, barrier.bufferBarriers[frameIdx].size(), barrier.bufferBarriers[frameIdx].data(),
+                        0, NULL);
+                }
 
                 VkRect2D fullScreen;
                 fullScreen.extent.width = w;
@@ -2001,6 +2081,16 @@ namespace vkrg
         ResizePhysicalResources();
         ClearCompileCache();
     }
+
+    uint32_t RenderGraph::GetResourceFrameIdx(uint32_t idx, bool external)
+    {
+        if (!external && m_Options.disableFrameOnFlight)
+        {
+            return 0;
+        }
+        return idx;
+    }
+
 
     uint32_t RenderGraph::ScoreMergedNode(DAGMergedNode node)
     {

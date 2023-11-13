@@ -30,7 +30,7 @@ struct Lights
 };
 
 
-inline Light MakeLight(int lightType, glm::vec3 vec, glm::vec3 intensity)
+inline Light MakeLight(int lightType, glm::vec3 vec, glm::vec3 intensity, float radius)
 {
 	Light light;
 	glm::vec4 lvec;
@@ -38,7 +38,7 @@ inline Light MakeLight(int lightType, glm::vec3 vec, glm::vec3 intensity)
 	lvec.x = vec.x, lvec.y = vec.y, lvec.z = vec.z;
 
 	light.vec = lvec;
-	light.intensity = glm::vec4(intensity.x, intensity.y, intensity.z, 1);
+	light.intensity = glm::vec4(intensity.x, intensity.y, intensity.z, radius);
 	return light;
 }
 
@@ -176,6 +176,7 @@ public:
 
 	void IntializeLighting()
 	{
+		/*
 		glm::vec4 vec;
 		vec.w = LIGHT_TYPE_POINT;
 		lightData.count = MAX_LIGHT_COUNT;
@@ -184,7 +185,7 @@ public:
 
 		float x_grid = (box.upper.x - box.lower.x) / GRID_COUNT;
 		float z_grid = (box.upper.z - box.lower.z) / GRID_COUNT;
-		float y_grid = (box.upper.y - box.upper.y) / GRID_COUNT;
+		float y_grid = (box.upper.y - box.lower.y) / GRID_COUNT * 4;
 
 		sizeof(Light);
 
@@ -201,12 +202,45 @@ public:
 					{
 						break;
 					}
+
 					glm::vec3 pos = lower + glm::vec3(x * x_grid, y * y_grid, z * z_grid);
 					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos + glm::vec3(0, 1, 0), glm::vec3(0.1, 0.1, 0.1));
 				}
 			}
 		}
+		*/
+		
+		glm::vec4 vec;
+		vec.w = LIGHT_TYPE_POINT;
+		lightData.count = GRID_COUNT * GRID_COUNT * 4;
 
+		vkglTF::BoundingBox box = model.GetBox();
+
+		float x_grid = (box.upper.x - box.lower.x) / GRID_COUNT;
+		float z_grid = (box.upper.z - box.lower.z) / GRID_COUNT;
+		float y_grid = (box.upper.y - box.lower.y) / GRID_COUNT * 3;
+
+		sizeof(Light);
+
+		glm::vec3 lower = box.lower;
+		for (uint32_t y = 0; y < 4; y++)
+		{
+			for (uint32_t z = 0; z < GRID_COUNT; z++)
+			{
+				for (uint32_t x = 0; x < GRID_COUNT; x++)
+				{
+					uint32_t lightIdx = x + z * GRID_COUNT + y * GRID_COUNT * GRID_COUNT;
+
+					if (lightIdx >= MAX_LIGHT_COUNT)
+					{
+						break;
+					}
+					glm::vec3 pos = lower + glm::vec3(x * x_grid, 1 + y_grid * y, z * z_grid);
+					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos, glm::vec3(1, 1, 1) * 2.0f, 1);
+				}
+			}
+		}
+		
 	}
 
 	virtual bool CustomInitialize() override
