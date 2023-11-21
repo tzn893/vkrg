@@ -5,7 +5,15 @@
 #include "light.glsli"
 
 #ifndef TILE_MAX_LIGHT_COUNT
-#define TILE_MAX_LIGHT_COUNT 127
+#define TILE_MAX_LIGHT_COUNT 200
+#endif
+
+#ifndef MAX_TILE_COUNT
+#define MAX_TILE_COUNT 8100
+#endif
+
+#ifndef MAX_LIGHT_INDEX_COUNT
+#define MAX_LIGHT_INDEX_COUNT MAX_TILE_COUNT * TILE_MAX_LIGHT_COUNT
 #endif
 
 struct TileLighting
@@ -31,5 +39,17 @@ int GetTileIdx(Screen screen, vec2 uv)
 
 	return y_tile_idx * int(screen.tileCount.x) + x_tile_idx;
 }
+
+struct LightGrid
+{
+    // (start, count) of lights in tile 
+    uvec2 grid[MAX_TILE_COUNT];
+};
+
+struct LightIndexBuffer
+{
+    uint indices[MAX_LIGHT_INDEX_COUNT];
+};
+
 
 #endif

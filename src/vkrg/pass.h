@@ -23,6 +23,7 @@ namespace vkrg
 		{
 			ImageColorOutput,
 			ImageDepthOutput,
+			ImageDepthInput,
 			ImageColorInput,
 
 			ImageStorageInput,
@@ -102,8 +103,8 @@ namespace vkrg
 	public:
 		RenderPassRuntimeContext(RenderGraph* graph, uint32_t frameIdx, uint32_t passIdx);
 		
-		VkImageView GetImageAttachment(RenderPassAttachment attachment);
-		BufferView GetBufferAttachment(RenderPassAttachment attachment);
+		VkImageView GetImageAttachment(RenderPassAttachment attachment, uint32_t frameIdx = 0xffffffff);
+		BufferView GetBufferAttachment(RenderPassAttachment attachment, uint32_t frameIdx = 0xffffffff);
 
 		bool		CheckAttachmentDirtyFlag(RenderPassAttachment attachment);
 	
@@ -123,7 +124,8 @@ namespace vkrg
 
 		opt<RenderPassAttachment> AddImageColorOutput(const char* name, ImageSlice range, VkImageViewType    viewType = VK_IMAGE_VIEW_TYPE_2D);
 		opt<RenderPassAttachment> AddImageDepthOutput(const char* name, ImageSlice range, VkImageViewType    viewType = VK_IMAGE_VIEW_TYPE_2D);
-		opt<RenderPassAttachment> AddImageColorInput(const char* name, ImageSlice range, VkImageViewType    viewType);
+		opt<RenderPassAttachment> AddImageDepthInput(const char* name, ImageSlice range, VkImageViewType	 viewType = VK_IMAGE_VIEW_TYPE_2D);
+		opt<RenderPassAttachment> AddImageColorInput(const char* name, ImageSlice range, VkImageViewType	 viewType);
 		
 		opt<RenderPassAttachment> AddImageStorageInput(const char* name, ImageSlice range, VkImageViewType    viewType);
 		opt<RenderPassAttachment> AddImageStorageOutput(const char* name, ImageSlice range, VkImageViewType    viewType);

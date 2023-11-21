@@ -1,10 +1,7 @@
 #version 450
-
 #include "tile.glsli"
 #include "light.glsli"
 #include "pbr.glsli"
-
-layout (location = 0) in vec2 inUV;
 
 layout (perCamera, binding = 0) uniform CameraUBO
 {
@@ -32,41 +29,37 @@ layout(perDraw, binding = 0) uniform ScreenUBO
     Screen ubo;
 } screenUBO;
 
-layout (perMaterial, binding = 0) uniform sampler2D colorSampler;
-layout (perMaterial, binding = 1) uniform sampler2D materialSampler;
-layout (perMaterial, binding = 2) uniform sampler2D normalSampler;
-layout (perMaterial, binding = 3) uniform sampler2D depthSampler;
+layout (perMaterial, binding = 0) uniform sampler2D samplerMetallicRoughness;
+layout (perMaterial, binding = 1) uniform sampler2D samplerColor;
+layout (perMaterial, binding = 2) uniform sampler2D samplerNormalMap;
+
+layout (location = 0) in vec3 inNormal;
+layout (location = 1) in vec2 inUV;
+layout (location = 2) in vec3 inWorldPos;
+layout (location = 3) in vec3 inTangent;
 
 layout (location = 0) out vec4 outColor;
 
 
 PBRParameter GetPbrParameter()
 {
-	vec4 normal = texture(normalSampler, inUV);
-	vec2 metallicRoughness = texture(materialSampler, inUV).xy;
-	vec3 color = texture(colorSampler, inUV).xyz;
-
-	float depth = texture(depthSampler, inUV).x;
-
-	vec3 ndc = vec3(inUV * 2 - 1, depth);
-
-    // 将NDC空间坐标转换到剪裁空间
-    vec4 clip = vec4(ndc, 1.0);
-    // 使用逆投影矩阵将剪裁空间坐标转换到观察空间
-    vec4 view = cameraUBO.camera.invProjection * clip;
-    // 将齐次坐标转换到笛卡尔坐标
-	vec4 position = (cameraUBO.camera.invView * view);
-	position /= position.w;
-
+    vec3 N = normalize(inNormal);
+	vec3 T = normalize(inTangent);
+	vec3 B = cross(N, T);
+	mat3 TBN = mat3(T, B, N);
+	vec3 tnorm = TBN * normalize(texture(samplerNormalMap, inUV).xyz * 2.0 - vec3(1.0));
+	
+	vec2 metallicRoughness = texture(samplerMetallicRoughness, inUV).xy;
+	vec3 color = texture(samplerColor, inUV).xyz;
 
 	PBRParameter param;
-	param.N = normalize(normal.xyz * 2.0 - 1.0);
+	param.N = tnorm;
 
-	param.V = normalize(cameraUBO.camera.cameraPosition - position.xyz);
+	param.V = normalize(cameraUBO.camera.cameraPosition - inWorldPos);
 	param.albedo = color;
 	param.roughness = metallicRoughness.y;
 	param.metallic = metallicRoughness.x;
-	param.P = position.xyz;
+	param.P = inWorldPos;
 
 	return param;
 }
@@ -75,15 +68,14 @@ PBRParameter GetPbrParameter()
 // ----------------------------------------------------------------------------
 void main()
 {		  
-
-	int tileIdx = GetTileIdx(screenUBO.ubo, inUV);
+	int tileIdx = GetTileIdx(screenUBO.ubo, gl_FragCoord.xy * screenUBO.ubo.resolution.zw);
 
 	PBRParameter param = GetPbrParameter();
 	// Specular contribution
 	vec3 Lo = vec3(0.0);
 	uint lightCount = lightGrid.grid.grid[tileIdx].y;
 	uint lightOffset = lightGrid.grid.grid[tileIdx].x;
-
+	
 
 	for (uint i = 0; i < lightCount; i++) {
 		uint idx = lightIndex.indices.indices[lightOffset + i];

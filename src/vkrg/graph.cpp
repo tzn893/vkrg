@@ -301,7 +301,7 @@ namespace vkrg
                 {
                     m_LogicalResourceList[resource.idx].info.usages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
                 }
-                if (attachment.type == RenderPassAttachment::ImageDepthOutput)
+                if (attachment.type == RenderPassAttachment::ImageDepthOutput || attachment.type == RenderPassAttachment::ImageDepthInput)
                 {
                     m_LogicalResourceList[resource.idx].info.usages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
                 }
@@ -317,6 +317,7 @@ namespace vkrg
                 {
                     m_LogicalResourceList[resource.idx].info.usages |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
                 }
+                
 
                 if (attachment.ReadFromResource() && renderPass->RequireClearColor(attachment))
                 {
@@ -498,11 +499,14 @@ namespace vkrg
                         auto otherInputNode = inputNodes[i];
                         auto otherInputMergedNode = dependingMergedNodes[i];
 
+                        // 基于当前选定的merged node，我们检查其是否能到达当前node依赖的其它merge node
+                        // 若能到达则如果将当前node合并到选定的merged node中就会在依赖图中构造环
+                        // 这种情况下，我们不能将该node合并到merged node中
                         if (otherInputNode != currentInputNode)
                         {
                             // if we merge to this incoming node, we will create a edge from incoming node to other node
                             // we will create a cycle when adding this edge if other node can reach incoming node
-                            if (m_MergedRenderPassGraph.CanReach(otherInputMergedNode, incomingMergedNode))
+                            if (m_MergedRenderPassGraph.CanReach(incomingMergedNode, otherInputMergedNode))
                             {
                                 skipToAviodCycle = true;
                                 break;
@@ -780,13 +784,28 @@ namespace vkrg
         VkImageLayout Query(ImageSlice subresource)
         {
             VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+            bool flag = false;
+
+            // VkImage of format VK_FORMAT_D24_UNORM_S8_UINT that must have the depth and stencil aspects set, 
+            // but its aspectMask is 0x2. The Vulkan spec states: If image has a depth/stencil format with both 
+            // depth and stencil and the separateDepthStencilLayouts feature is not enabled, then the aspectMask 
+            // member of subresourceRange must include both VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT
+            if (subresource.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT || subresource.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT)
+            {
+                subresource.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
 
             auto op = [&](uint32_t idx)
             {
                 VkImageLayout subresourceLayout = subresourceLayouts[idx];
-                if (subresourceLayout != layout)
+                if (!flag)
                 {
                     layout = subresourceLayout;
+                    flag = true;
+                }
+                else
+                {
+                    if (layout != subresourceLayout) layout = VK_IMAGE_LAYOUT_UNDEFINED;
                 }
             };
             SubresourceRange(subresource, op);
@@ -801,6 +820,16 @@ namespace vkrg
             {
                 subresourceLayouts[idx] = layout;
             };
+
+            // VkImage of format VK_FORMAT_D24_UNORM_S8_UINT that must have the depth and stencil aspects set, 
+            // but its aspectMask is 0x2. The Vulkan spec states: If image has a depth/stencil format with both 
+            // depth and stencil and the separateDepthStencilLayouts feature is not enabled, then the aspectMask 
+            // member of subresourceRange must include both VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT
+            if (subresource.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT || subresource.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT)
+            {
+                subresource.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
+
             SubresourceRange(subresource, op);
         }
 
@@ -1040,6 +1069,15 @@ namespace vkrg
                         VkImageMemoryBarrier barrier{};
                         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                         barrier.subresourceRange = attachment.range.imageRange;
+                        
+                        // VkImage of format VK_FORMAT_D24_UNORM_S8_UINT that must have the depth and stencil aspects set, 
+                        // but its aspectMask is 0x2. The Vulkan spec states: If image has a depth/stencil format with both 
+                        // depth and stencil and the separateDepthStencilLayouts feature is not enabled, then the aspectMask 
+                        // member of subresourceRange must include both VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT
+                        if (attachment.range.imageRange.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT || attachment.range.imageRange.aspectMask ==  VK_IMAGE_ASPECT_STENCIL_BIT)
+                        {
+                            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+                        }
                         auto assign = m_LogicalResourceAssignmentTable[resource.idx];
                         VkImageLayout newStateLayout = computePass->pass->GetAttachmentExpectedState(attachment);
                         
@@ -1106,6 +1144,8 @@ namespace vkrg
                         handle.idx = assign.idx;
                         handle.external = assign.external;
 
+                        // TODO better source stage flag
+                        // render pass will not write to buffer so we can assume the render pass ahead is compute render pass
                         VkPipelineStageFlagBits srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, dstStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
                         barrierHelper.AddBuffer(srcStage, dstStage, barrier, handle);
                     }
@@ -1339,7 +1379,7 @@ namespace vkrg
                                 // one resource should not be cleared twice
 
                                 renderPassNode->pass->GetAttachmentOperationState(attachment, opState);
-                                FrameBufferAttachmentDescriptor& desc = frameBufferAttachmentDescs[physicalResourceIdx];
+                                FrameBufferAttachmentDescriptor& desc = frameBufferAttachmentDescs[physicalResourceAttachmentIdx];
                                 desc.finalLayout = renderPassNode->pass->GetAttachmentExpectedState(attachment);
 
                                 // overwrite the clear color value requirment
@@ -1538,8 +1578,7 @@ namespace vkrg
                         RenderPassAttachmentOperationState opState{};
                         renderPassNode->pass->GetAttachmentOperationState(attachment, opState);
                         
-                        vkrg_assert(attachment.type != RenderPassAttachment::ImageStorageInput && attachment.type != RenderPassAttachment::BufferStorageInput
-                            && attachment.type != RenderPassAttachment::BufferStorageOutput && attachment.type != RenderPassAttachment::ImageStorageOutput);
+                        vkrg_assert(attachment.type != RenderPassAttachment::ImageStorageInput && attachment.type != RenderPassAttachment::ImageStorageOutput);
 
                         if (attachment.type == RenderPassAttachment::ImageColorInput)
                         {
@@ -1549,7 +1588,7 @@ namespace vkrg
                         {
                             vkRenderPassCreateInfo.AddSubpassColorAttachment(currentSubpassIndex, fbAttachmentIdx);
                         }
-                        else if (attachment.type == RenderPassAttachment::ImageDepthOutput)
+                        else if (attachment.type == RenderPassAttachment::ImageDepthOutput || attachment.type == RenderPassAttachment::ImageDepthInput)
                         {
                             vkRenderPassCreateInfo.AddSubpassDepthStencilAttachment(currentSubpassIndex, fbAttachmentIdx);
                         }
@@ -1813,13 +1852,13 @@ namespace vkrg
                     for (uint32_t i = 0; i < barrier.imageBarriers[0].size(); i++)
                     {
                         ResourceBindingInfo* binding = NULL;
-                        if (barrier.bufferBarrierHandles[i].external)
+                        if (barrier.imageBarrierHandles[i].external)
                         {
-                            binding = &m_ExternalResourceBindings[barrier.bufferBarrierHandles[i].idx];
+                            binding = &m_ExternalResourceBindings[barrier.imageBarrierHandles[i].idx];
                         }
                         else
                         {
-                            binding = &m_PhysicalResourceBindings[barrier.bufferBarrierHandles[i].idx];
+                            binding = &m_PhysicalResourceBindings[barrier.imageBarrierHandles[i].idx];
                         }
 
                         if (binding->dirtyFlag)

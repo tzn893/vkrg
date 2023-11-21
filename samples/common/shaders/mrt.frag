@@ -1,4 +1,6 @@
 #version 450
+#extension GL_EXT_debug_printf : enable
+
 #include "camera.glsli"
 
 layout (perMaterial, binding = 0) uniform sampler2D samplerMetallicRoughness;
@@ -22,7 +24,7 @@ void main()
 	vec3 B = cross(N, T);
 	mat3 TBN = mat3(T, B, N);
 	vec3 tnorm = TBN * normalize(texture(samplerNormalMap, inUV).xyz * 2.0 - vec3(1.0));
-	outNormal = vec4(tnorm, 1.0);
+	outNormal = vec4(tnorm * 0.5 + 0.5, 1.0) ;
 
 	outColor = texture(samplerColor, inUV);
 	outMaterial.xy = texture(samplerMetallicRoughness, inUV).xy;

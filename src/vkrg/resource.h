@@ -69,5 +69,7 @@ namespace vkrg
 	{
 		uint64_t size;
 		uint64_t offset;
+
+		static BufferSlice fullBuffer;
 	};
 }

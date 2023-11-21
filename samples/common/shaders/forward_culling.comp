@@ -52,12 +52,27 @@ layout(set = 0, binding = 5) buffer LightCounter
     int lightCounter;
 } lightCounter;
 
+layout(set = 0, binding = 6) uniform sampler2D depthSampler;
+
+shared uint  lights[TILE_MAX_LIGHT_COUNT];
+shared int   lightCount;
+
+shared uint  tileMinDepth;
+shared uint  tileMaxDepth;
 
 vec4 computeLightBoundingSphere(Light light)
 {
     float r = light.intensity.w;
     return vec4( light.vec.xyz, r);
 }   
+
+vec2 getTileMaxMinDepth()
+{
+    float ftileMaxDepth = uintBitsToFloat(tileMaxDepth);
+    float ftileMinDepth = uintBitsToFloat(tileMinDepth);
+
+    return vec2(ftileMaxDepth, ftileMinDepth);
+}
 
 void printFrustrum(Frustrum frustrum)
 {
@@ -84,23 +99,38 @@ Frustrum computeFrustrum()
 
     float v_tile = groupID.y * y_tile_size - 1;
     float v_tile_1 = v_tile + y_tile_size;
+
+    vec2 tileMaxMinDepth = getTileMaxMinDepth();
     
     Frustrum frustrum = ComputeCameraFrustrum(u_tile, u_tile_1, v_tile, v_tile_1, 0, 1, cameraUBO.camera);
-
 
     return frustrum;
 }
 
+void computeTileMaxMinDepth()
+{
+    vec2 tile_uv = vec2(gl_GlobalInvocationID.xy) * screenUBO.ubo.resolution.zw;
+    float depth = texture(depthSampler, tile_uv).x;
+
+    uint udepth = floatBitsToUint(depth);
+
+    atomicMax(tileMaxDepth, udepth);
+    atomicMin(tileMinDepth, udepth);
+
+    barrier();
+}
 
 
-
-shared uint  lights[TILE_MAX_LIGHT_COUNT];
-shared int   lightCount;
 
 void main()
 {
     lightCount = 0;
+    tileMaxDepth = 0;
+    tileMinDepth = 4294967295;
     barrier();
+
+    computeTileMaxMinDepth();
+
 
     ivec2 groupID = ivec2(gl_WorkGroupID.xy);
     int tileIdx = int(screenUBO.ubo.tileCount.x) * groupID.y + groupID.x;
@@ -108,7 +138,6 @@ void main()
     // TODO 实现计算当前tile对应的frustrum
     Frustrum frustrum = computeFrustrum();
     int threadIdx = int(gl_LocalInvocationID.x)  + int(gl_LocalInvocationID.y) * TILE_SIZE; 
-
     
     // 并行的对当前tile以及所有Light做剔除
     for(int i = threadIdx; i < lightUBO.count; i += TILE_STRIDE)

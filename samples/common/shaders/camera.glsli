@@ -1,6 +1,14 @@
 #ifndef CAMERA_GLSLI
 #define CAMERA_GLSLI
 
+#ifndef TRUE
+#define TRUE (1)
+#endif
+
+#ifndef FALSE
+#define FALSE (0)
+#endif
+
 struct Object
 {
 	mat4 model;
@@ -43,9 +51,33 @@ Frustrum ComputeCameraFrustrum(float u_tile, float u_tile_1, float v_tile, float
     frustrum.plane[4] = front;
     frustrum.plane[5] = back;
 
-
     return frustrum;
 }
+
+int FrustrumSphereIntersection(Frustrum frustrum, vec4 sphere)
+{
+
+    vec3  sphereOrigin = sphere.xyz;
+    float sphereRadius = sphere.w;
+
+    for(int i = 0; i < 6; i++)
+    {
+        vec4 plane = frustrum.plane[i];
+        
+        vec3    planeNormal   = plane.xyz;
+        float   planeDistance = plane.w;
+
+        float sphereDistance = dot(planeNormal, sphereOrigin);
+
+        if(sphereDistance + planeDistance > sphereRadius)
+        {
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
 
 #define perNode set = 0
 #define perMaterial set = 1

@@ -40,19 +40,23 @@ struct Screen
 	glm::vec4  tileCount;
 };
 
-constexpr int MAX_TILE_LIGHT = 127;
 
-struct TileLighting
-{
-	ivec4 lightCount;
-	vec4  padding;
-	Light lights[MAX_TILE_LIGHT];
-};
 
-struct CullingResult
-{
-	TileLighting tileLighting[8100];
-};
+#ifndef TILE_MAX_LIGHT_COUNT
+#define TILE_MAX_LIGHT_COUNT 200
+#endif
+
+#ifndef MAX_TILE_COUNT
+#define MAX_TILE_COUNT 8100
+#endif
+
+#ifndef MAX_LIGHT_INDEX_COUNT
+#define MAX_LIGHT_INDEX_COUNT MAX_TILE_COUNT * TILE_MAX_LIGHT_COUNT
+#endif
+
+constexpr uint32_t sizeOfLightGrid = sizeof(glm::uvec2) * MAX_TILE_COUNT;
+constexpr uint32_t sizeOfLightIndex = sizeof(uint32_t) * MAX_LIGHT_INDEX_COUNT;
+
 
 inline Light MakeLight(int lightType, glm::vec3 vec, glm::vec3 intensity, float radius)
 {
@@ -90,9 +94,9 @@ class MyDeferredShading : public  DeferredShading
 public:
 	MyDeferredShading(RenderPass* targetPass, RenderPassAttachment normal, RenderPassAttachment color,
 		RenderPassAttachment material, RenderPassAttachment color_output, RenderPassAttachment depth,
-		RenderPassAttachment cullingResult, DeferredApplication* app)
+		RenderPassAttachment lightIndex, RenderPassAttachment lightGrid, DeferredApplication* app)
 		:DeferredShading(targetPass, normal, color, material, color_output, depth), 
-		app(app), cullingResult(cullingResult)
+		app(app), lightIndex(lightIndex), lightGrid(lightGrid)
 	{}
 
 	virtual void OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd) override;
@@ -103,7 +107,8 @@ public:
 
 private:
 
-	RenderPassAttachment cullingResult;
+	RenderPassAttachment lightIndex;
+	RenderPassAttachment lightGrid;
 	DeferredApplication* app;
 };
 
@@ -111,8 +116,8 @@ private:
 class TileCulling : public RenderPassInterface
 {
 public:
-	TileCulling(RenderPass* pass, RenderPassAttachment cullingResult, DeferredApplication* app) :
-		RenderPassInterface(pass), cullingResult(cullingResult), app(app) {}
+	TileCulling(RenderPass* pass, RenderPassAttachment lightGrid, RenderPassAttachment lightIndex, RenderPassAttachment lightCounter, DeferredApplication* app) :
+		RenderPassInterface(pass), lightGrid(lightGrid), lightIndex(lightIndex), lightCounter(lightCounter), app(app) {}
 
 	virtual void OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd) override;
 	
@@ -123,7 +128,28 @@ public:
 
 private:
 
-	RenderPassAttachment cullingResult;
+	RenderPassAttachment lightGrid;
+	RenderPassAttachment lightIndex;
+	RenderPassAttachment lightCounter;
+
+	DeferredApplication* app;
+};
+
+class LightCounterClear : public RenderPassInterface
+{
+public:
+	LightCounterClear(RenderPass* pass, RenderPassAttachment lightCounter, DeferredApplication* app) :
+		RenderPassInterface(pass), lightCounter(lightCounter), app(app) {}
+
+	virtual void OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd) override;
+
+	virtual RenderPassType ExpectedType()
+	{
+		return RenderPassType::Compute;
+	}
+
+private:
+	RenderPassAttachment lightCounter;
 	DeferredApplication* app;
 };
 
@@ -134,6 +160,7 @@ class DeferredApplication : public Application
 	friend class MyDeferredPass;
 	friend class MyDeferredShading;
 	friend class TileCulling;
+	friend class LightCounterClear;
 public:
 
 	DeferredApplication(uint32_t width, uint32_t height, GVK_DEVICE_EXTENSION* exts, uint32_t extCnt, GVK_INSTANCE_EXTENSION* instances, uint32_t instCnt)
@@ -157,24 +184,43 @@ public:
 		info.format = VK_FORMAT_D24_UNORM_S8_UINT;
 		rg->AddGraphResource("depthStencil", info, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
+		/*
 		info.format = VK_FORMAT_UNDEFINED;
 		info.extType = ResourceExtensionType::Buffer;
 		info.ext.buffer.size = sizeof(CullingResult);
 		info.usages = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 		rg->AddGraphResource("cullingResult", info, false);
+		*/
+		info.format = VK_FORMAT_UNDEFINED;
+		info.extType = ResourceExtensionType::Buffer;
+		info.ext.buffer.size = sizeOfLightGrid;
+		info.usages = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+		rg->AddGraphResource("lightGrid", info, false);
+
+		info.ext.buffer.size = sizeOfLightIndex;
+		rg->AddGraphResource("lightIndex", info, false);
+
+		info.ext.buffer.size = sizeof(uint32_t);
+		rg->AddGraphResource("lightCounter", info, false);
 
 		deferredPassHandle = rg->AddGraphRenderPass("deferred pass", RenderPassType::Graphics).value();
 		deferredShadingHandle = rg->AddGraphRenderPass("deferred shading", RenderPassType::Graphics).value();
 		tileCullingHandle = rg->AddGraphRenderPass("tile culling", RenderPassType::Compute).value();
+		lightCounterClearHandle = rg->AddGraphRenderPass("clear light counter", RenderPassType::Compute).value();
 
 		{
-			BufferSlice slice;
-			slice.offset = 0;
-			slice.size = sizeof(CullingResult);
+			
+			auto lightGrid = tileCullingHandle.pass->AddBufferStorageOutput("lightGrid", BufferSlice::fullBuffer).value();
+			auto lightIndex = tileCullingHandle.pass->AddBufferStorageOutput("lightIndex", BufferSlice::fullBuffer).value();
+			auto lightCounter = tileCullingHandle.pass->AddBufferStorageInput("lightCounter", BufferSlice::fullBuffer).value();
 
-			auto cullingResult = tileCullingHandle.pass->AddBufferStorageOutput("cullingResult", slice).value();
+			CreateRenderPassInterface<TileCulling>(tileCullingHandle.pass.get(), lightGrid, lightIndex, lightCounter, this);
+		}
 
-			CreateRenderPassInterface<TileCulling>(tileCullingHandle.pass.get(), cullingResult, this);
+		{
+			auto lightCounter = lightCounterClearHandle.pass->AddBufferStorageOutput("lightCounter", BufferSlice::fullBuffer).value();
+
+			CreateRenderPassInterface<LightCounterClear>(lightCounterClearHandle.pass.get(), lightCounter, this);
 		}
 
 		{
@@ -215,12 +261,9 @@ public:
 			range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 			auto depth = pass->AddImageColorInput("depthStencil", range, VK_IMAGE_VIEW_TYPE_2D).value();
 
-			BufferSlice slice;
-			slice.offset = 0;
-			slice.size = sizeof(CullingResult);
-
-			auto cullingResult = pass->AddBufferStorageInput("cullingResult", slice).value();
-			CreateRenderPassInterface<MyDeferredShading>(pass.get(), normal, color, material, backBuffer, depth, cullingResult, this);
+			auto lightIndex = pass->AddBufferStorageInput("lightIndex", BufferSlice::fullBuffer).value();
+			auto lightGrid = pass->AddBufferStorageInput("lightGrid", BufferSlice::fullBuffer).value();
+			CreateRenderPassInterface<MyDeferredShading>(pass.get(), normal, color, material, backBuffer, depth, lightIndex, lightGrid, this);
 		}
 
 		RenderGraphDeviceContext deviceCtx;
@@ -275,7 +318,7 @@ public:
 						break;
 					}
 					glm::vec3 pos = lower + glm::vec3(x * x_grid, 1 + y_grid * y, z * z_grid);
-					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos, glm::vec3(1, 1, 1) * 4.5f, 1);
+					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos, glm::vec3(1, 1, 1) , 1);
 				}
 			}
 		}
@@ -309,13 +352,12 @@ public:
 
 		std::string error;
 		const char* include_directorys[] = { VKRG_SHADER_DIRECTORY };
-		std::string maxTileLightStr = std::to_string(MAX_TILE_LIGHT);
 
 		auto deferredShadingVert = context->CompileShader("deferred.vert", gvk::ShaderMacros(),
 			include_directorys, gvk_count_of(include_directorys),
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
-		auto deferredShadingFrag = context->CompileShader("tile_deferred.frag", gvk::ShaderMacros().D("MAX_TILE_LIGHT", maxTileLightStr.c_str()),
+		auto deferredShadingFrag = context->CompileShader("tile_deferred.frag", gvk::ShaderMacros(),
 			include_directorys, gvk_count_of(include_directorys),
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
@@ -328,7 +370,12 @@ public:
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
 
-		auto tileCullingComp = context->CompileShader("tile_culling.comp", gvk::ShaderMacros().D("MAX_TILE_LIGHT", maxTileLightStr.c_str()),
+		auto tileCullingComp = context->CompileShader("tile_culling.comp", gvk::ShaderMacros(),
+			include_directorys, gvk_count_of(include_directorys),
+			include_directorys, gvk_count_of(include_directorys),
+			&error).value();
+
+		auto lightCounterClearComp = context->CompileShader("tile_counter_clear.comp", gvk::ShaderMacros(),
 			include_directorys, gvk_count_of(include_directorys),
 			include_directorys, gvk_count_of(include_directorys),
 			&error).value();
@@ -357,12 +404,20 @@ public:
 			tileCullingPipeline = context->CreateComputePipeline(pipelineCI).value();
 		}
 
+		{
+			GvkComputePipelineCreateInfo pipelineCI;
+			pipelineCI.shader = lightCounterClearComp;
+			lightCounterClearPipeline = context->CreateComputePipeline(pipelineCI).value();
+		}
+
 		auto cameraLayout = deferredPassPipeline->GetInternalLayout(vkglTF::perCameraBindingIndex, (VkShaderStageFlagBits)0);
 		auto shadingPerdrawLayout = deferredShadingPipeline->GetInternalLayout(vkglTF::perDrawBindingIndex, (VkShaderStageFlagBits)0);
 		auto materialLayout = deferredShadingPipeline->GetInternalLayout(vkglTF::perMaterialBindingIndex, (VkShaderStageFlagBits)0);
 
 		auto shadingCameraLayout = deferredShadingPipeline->GetInternalLayout(vkglTF::perCameraBindingIndex, (VkShaderStageFlagBits)0);
 		auto tileCullingDescriptorLayout = tileCullingPipeline->GetInternalLayout(0, (VkShaderStageFlagBits)0);
+
+		auto lightCounterClearDescriptorLayout = lightCounterClearPipeline->GetInternalLayout(0, (VkShaderStageFlagBits)0);
 
 		model.createDescriptorsForPipeline(descriptorAlloc, deferredPassPipeline);
 
@@ -394,10 +449,12 @@ public:
 		materialDescriptor = descriptorAlloc->Allocate(materialLayout.value()).value();
 		shadingCameraDescriptor = descriptorAlloc->Allocate(shadingCameraLayout.value()).value();
 		tileCullingDescriptor = descriptorAlloc->Allocate(tileCullingDescriptorLayout.value()).value();
+		lightCounterClearDescriptor = descriptorAlloc->Allocate(lightCounterClearDescriptorLayout.value()).value();
 
 
 		GvkDescriptorSetWrite()
 			.BufferWrite(shadingPerDrawDescriptor, "screenUBO", screenBuffer->GetBuffer(), 0, screenBuffer->GetSize())
+			.BufferWrite(shadingPerDrawDescriptor, "lightUBO", lightBuffer->GetBuffer(), 0, lightBuffer->GetSize())
 			.BufferWrite(cameraDescriptor, "cameraUBO", cameraBuffer->GetBuffer(), 0, cameraBuffer->GetSize())
 			.BufferWrite(shadingCameraDescriptor, "cameraUBO", cameraBuffer->GetBuffer(), 0, cameraBuffer->GetSize())
 			.BufferWrite(tileCullingDescriptor, "lightUBO", lightBuffer->GetBuffer(), 0, lightBuffer->GetSize())
@@ -416,10 +473,12 @@ public:
 	RenderPassHandle deferredShadingHandle;
 	RenderPassHandle deferredPassHandle;
 	RenderPassHandle tileCullingHandle;
+	RenderPassHandle lightCounterClearHandle;
 
 	gvk::ptr<gvk::Pipeline> deferredShadingPipeline;
 	gvk::ptr<gvk::Pipeline> deferredPassPipeline;
 	gvk::ptr<gvk::Pipeline>	tileCullingPipeline;
+	gvk::ptr<gvk::Pipeline> lightCounterClearPipeline;
 
 	gvk::ptr<gvk::Buffer>			lightBuffer;
 	Lights							lightData;
@@ -436,6 +495,7 @@ public:
 	VkSampler						backBufferSampler;
 
 	gvk::ptr<gvk::DescriptorSet>	tileCullingDescriptor;
+	gvk::ptr<gvk::DescriptorSet>	lightCounterClearDescriptor;
 
 	vkglTF::Model model;
 };
@@ -473,14 +533,13 @@ void MyDeferredShading::OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer 
 			.Emit(app->context->GetDevice());
 	}
 
-	if (ctx.CheckAttachmentDirtyFlag(cullingResult))
+	if (ctx.CheckAttachmentDirtyFlag(lightIndex))
 	{
-		BufferView cullingResultBuffer = ctx.GetBufferAttachment(cullingResult);
+		BufferView lightIndexBuffer = ctx.GetBufferAttachment(lightIndex);
+		BufferView lightGridBuffer = ctx.GetBufferAttachment(lightGrid);
 		GvkDescriptorSetWrite()
-		.BufferWrite(app->shadingPerDrawDescriptor, "cullingResult", 
-			cullingResultBuffer.buffer, 
-			cullingResultBuffer.offset, 
-			cullingResultBuffer.size)
+		.BufferWrite(app->shadingPerDrawDescriptor, "lightIndex", lightIndexBuffer.buffer, lightIndexBuffer.offset, lightIndexBuffer.size)
+		.BufferWrite(app->shadingPerDrawDescriptor, "lightGrid", lightGridBuffer.buffer, lightGridBuffer.offset, lightGridBuffer.size)
 		.Emit(app->context->GetDevice());
 	}
 
@@ -521,12 +580,16 @@ int main()
 
 void TileCulling::OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd)
 {
-	if (ctx.CheckAttachmentDirtyFlag(cullingResult))
+	if (ctx.CheckAttachmentDirtyFlag(lightIndex) || ctx.CheckAttachmentDirtyFlag(lightCounter) || ctx.CheckAttachmentDirtyFlag(lightGrid))
 	{
-		BufferView cullingResultBuffer = ctx.GetBufferAttachment(cullingResult);
+		BufferView lightIndexBuffer = ctx.GetBufferAttachment(lightIndex);
+		BufferView lightCounterBuffer = ctx.GetBufferAttachment(lightCounter);
+		BufferView lightGridBuffer = ctx.GetBufferAttachment(lightGrid);
 
 		GvkDescriptorSetWrite()
-		.BufferWrite(app->tileCullingDescriptor, "cullingResult", cullingResultBuffer.buffer, cullingResultBuffer.offset, cullingResultBuffer.size)
+			.BufferWrite(app->tileCullingDescriptor, "lightIndex", lightIndexBuffer.buffer, lightIndexBuffer.offset, lightIndexBuffer.size)
+			.BufferWrite(app->tileCullingDescriptor, "lightCounter", lightCounterBuffer.buffer, lightCounterBuffer.offset, lightCounterBuffer.size)
+			.BufferWrite(app->tileCullingDescriptor, "lightGrid", lightGridBuffer.buffer, lightGridBuffer.offset, lightGridBuffer.size)
 		.Emit(app->context->GetDevice());
 	}
 
@@ -537,4 +600,24 @@ void TileCulling::OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd)
 	.Update();
 
 	vkCmdDispatch(cmd, (uint32_t)app->screenData.tileCount.x, (uint32_t)app->screenData.tileCount.y, 1);
+}
+
+void LightCounterClear::OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer cmd)
+{
+	if (ctx.CheckAttachmentDirtyFlag(lightCounter))
+	{
+		BufferView lightCounterBuffer = ctx.GetBufferAttachment(lightCounter);
+
+		GvkDescriptorSetWrite()
+			.BufferWrite(app->lightCounterClearDescriptor, "lightCounter", lightCounterBuffer.buffer, lightCounterBuffer.offset, lightCounterBuffer.size)
+		.Emit(app->context->GetDevice());
+	}
+
+	GvkBindPipeline(cmd, app->lightCounterClearPipeline);
+
+	GvkDescriptorSetBindingUpdate(cmd, app->lightCounterClearPipeline)
+	.BindDescriptorSet(app->lightCounterClearDescriptor)
+	.Update();
+
+	vkCmdDispatch(cmd , 1, 1, 1);
 }
