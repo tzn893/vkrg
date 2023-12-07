@@ -33,7 +33,7 @@ void main()
 	
 	// Normal in world space
 	mat3 mNormal = mat3(objectUBO.object.invTransModel);
-	outNormal = normalize(mNormal * inNormal) * 0.5 + 0.5;	
+	outNormal = normalize(mNormal * inNormal);	
 	outTangent = mNormal * normalize(inTangent);
 	// outNormal.w = gl_Position.z / gl_Position.w;
 }

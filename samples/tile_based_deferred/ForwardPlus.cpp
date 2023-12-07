@@ -320,6 +320,7 @@ public:
 
 	void IntializeLighting()
 	{
+		
 		glm::vec4 vec;
 		vec.w = LIGHT_TYPE_POINT;
 		lightData.count = GRID_COUNT * GRID_COUNT * 4;
@@ -346,7 +347,7 @@ public:
 						break;
 					}
 					glm::vec3 pos = lower + glm::vec3(x * x_grid, 1 + y_grid * y, z * z_grid);
-					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos, glm::vec3(1, 1, 1) * 3.0f, 1);
+					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos, glm::vec3(1, 1, 1) * 3.0f, 3);
 				}
 			}
 		}
@@ -359,8 +360,6 @@ public:
 		lightData.lights[0] = MakeLight(LIGHT_TYPE_POINT, glm::vec3(0, 1, 0), glm::vec3(10, 10, 10), 1.5);
 		*/
 
-		//lightData.count = 1;
-		//lightData.lights[0] = MakeLight(LIGHT_TYPE_POINT, glm::vec3(0, 0.1, 0), glm::vec3(1, 1, 1));
 	}
 
 	virtual bool CustomInitialize() override

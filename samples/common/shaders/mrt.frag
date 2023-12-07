@@ -1,6 +1,4 @@
 #version 450
-#extension GL_EXT_debug_printf : enable
-
 #include "camera.glsli"
 
 layout (perMaterial, binding = 0) uniform sampler2D samplerMetallicRoughness;

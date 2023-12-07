@@ -74,15 +74,6 @@ vec2 getTileMaxMinDepth()
     return vec2(ftileMaxDepth, ftileMinDepth);
 }
 
-void printFrustrum(Frustrum frustrum)
-{
-    debugPrintfEXT("plane0:%f,%f,%f,%f",frustrum.plane[0].x,frustrum.plane[0].y,frustrum.plane[0].z,frustrum.plane[0].w);
-    debugPrintfEXT("plane1:%f,%f,%f,%f",frustrum.plane[1].x,frustrum.plane[1].y,frustrum.plane[1].z,frustrum.plane[1].w);
-    debugPrintfEXT("plane2:%f,%f,%f,%f",frustrum.plane[2].x,frustrum.plane[2].y,frustrum.plane[2].z,frustrum.plane[2].w);
-    debugPrintfEXT("plane3:%f,%f,%f,%f",frustrum.plane[3].x,frustrum.plane[3].y,frustrum.plane[3].z,frustrum.plane[3].w);
-    debugPrintfEXT("plane4:%f,%f,%f,%f",frustrum.plane[4].x,frustrum.plane[4].y,frustrum.plane[4].z,frustrum.plane[4].w);
-    debugPrintfEXT("plane5:%f,%f,%f,%f",frustrum.plane[5].x,frustrum.plane[5].y,frustrum.plane[5].z,frustrum.plane[5].w);
-}
 
 Frustrum computeFrustrum()
 {
@@ -102,7 +93,7 @@ Frustrum computeFrustrum()
 
     vec2 tileMaxMinDepth = getTileMaxMinDepth();
     
-    Frustrum frustrum = ComputeCameraFrustrum(u_tile, u_tile_1, v_tile, v_tile_1, 0, 1, cameraUBO.camera);
+    Frustrum frustrum = ComputeCameraFrustrum(u_tile, u_tile_1, v_tile, v_tile_1, tileMaxMinDepth.y, tileMaxMinDepth.x, cameraUBO.camera);
 
     return frustrum;
 }
