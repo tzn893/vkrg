@@ -4,7 +4,6 @@ set(CMAKE_CXX_STANDARD 17)
 option(VKRG_ENABLE_SAMPLE "enable building vulkan render graph samples" Off)
 option(VKRG_ENABLE_TEST "enable building test cases" Off)
 
-add_subdirectory(json)
 add_subdirectory(gvk)
 
 project(vkrg)
