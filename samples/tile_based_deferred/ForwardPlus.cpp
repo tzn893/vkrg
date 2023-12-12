@@ -229,6 +229,36 @@ public:
 		info.usages = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 		rg->AddGraphResource("lightGrid", info, false);
 
+		// this resources  will be culled during compile stage
+		rg->AddGraphResource("__useless1", info, false);
+		rg->AddGraphResource("__useless2", info, false);
+		rg->AddGraphResource("__useless3", info, false);
+		rg->AddGraphResource("__useless4", info, false);
+		rg->AddGraphResource("__useless5", info, false);
+		rg->AddGraphResource("__useless6", info, false);
+		rg->AddGraphResource("__useless7", info, false);
+		rg->AddGraphResource("__useless8", info, false);
+		rg->AddGraphResource("__useless9", info, false);
+		rg->AddGraphResource("__useless10", info, false);
+		rg->AddGraphResource("__useless11", info, false);
+		rg->AddGraphResource("__useless12", info, false);
+		rg->AddGraphResource("__useless13", info, false);
+		rg->AddGraphResource("__useless14", info, false);
+		rg->AddGraphResource("__useless15", info, false);
+		rg->AddGraphResource("__useless16", info, false);
+		rg->AddGraphResource("__useless17", info, false);
+		rg->AddGraphResource("__useless18", info, false);
+		rg->AddGraphResource("__useless19", info, false);
+		rg->AddGraphResource("__useless20", info, false);
+		rg->AddGraphResource("__useless21", info, false);
+		rg->AddGraphResource("__useless22", info, false);
+		rg->AddGraphResource("__useless23", info, false);
+		rg->AddGraphResource("__useless24", info, false);
+		rg->AddGraphResource("__useless25", info, false);
+		rg->AddGraphResource("__useless26", info, false);
+		rg->AddGraphResource("__useless27", info, false);
+		rg->AddGraphResource("__useless28", info, false);
+
 		info.ext.buffer.size = sizeOfLightIndex;
 		rg->AddGraphResource("lightIndex", info, false);
 

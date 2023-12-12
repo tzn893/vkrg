@@ -40,3 +40,8 @@ add_custom_command(TARGET ${test_case} POST_BUILD
    
   message(STATUS "test case ${test_case} is added")
 endforeach()
+
+set_property(TARGET gmock PROPERTY FOLDER gtest-dir)
+set_property(TARGET gmock_main PROPERTY FOLDER gtest-dir)
+set_property(TARGET gtest PROPERTY FOLDER gtest-dir)
+set_property(TARGET gtest_main PROPERTY FOLDER gtest-dir)
