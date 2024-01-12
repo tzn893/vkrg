@@ -318,7 +318,7 @@ public:
 						break;
 					}
 					glm::vec3 pos = lower + glm::vec3(x * x_grid, 1 + y_grid * y, z * z_grid);
-					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos, glm::vec3(1, 1, 1) , 2);
+					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos, glm::vec3(1, 1, 1) * 3.0f, 3);
 				}
 			}
 		}
