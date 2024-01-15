@@ -234,9 +234,12 @@ namespace vkrg
                         msg = "validation error : external resource " + res.name + "'s " + std::to_string(frameIdx) + " th frame's binding is missing";
                         return RenderGraphRuntimeState::Error_MissingExternalResourceAttachment;
                     }
-                    else if (binding.buffers[frameIdx] == nullptr)
+                }
+                else if (m_LogicalResourceList[res.handle.idx].info.IsImage())
+                {
+                    if (binding.images[frameIdx] == nullptr)
                     {
-                        msg = "validation error : external resource " + res.name + "'s " + std::to_string(frameIdx) + "th frame's binding is missing";
+                        msg = "validation error : external resource " + res.name + "'s " + std::to_string(frameIdx) + " th frame's binding is missing";
                         return RenderGraphRuntimeState::Error_MissingExternalResourceAttachment;
                     }
                 }
