@@ -257,12 +257,17 @@ namespace vkglTF
 		static VkPipelineVertexInputStateCreateInfo* getPipelineVertexInputState(const std::vector<VertexComponent> components);
 	};
 
-	enum FileLoadingFlags {
+	enum FileLoadingFlags 
+	{
 		None = 0x00000000,
 		PreTransformVertices = 0x00000001,
 		PreMultiplyVertexColors = 0x00000002,
 		FlipY = 0x00000004,
-		DontLoadImages = 0x00000008
+		DontLoadImages = 0x00000008,
+		RayTracingSupport = 0x000000010,
+		RayTracingTransparent = 0x000000020,
+		RayTracingOpaque = 0x000000040,
+		RayTracingGeometryFlagSet = RayTracingOpaque | RayTracingTransparent
 	};
 
 	enum RenderFlags {
@@ -299,6 +304,12 @@ namespace vkglTF
 			gvk::ptr<gvk::Buffer> buffer;
 		} indices;
 
+		struct AccelerationStructure
+		{
+			std::vector<gvk::ptr<gvk::BottomAccelerationStructure>> blases;
+			gvk::ptr<gvk::TopAccelerationStructure> tlas;
+		} as;
+
 		std::vector<Node*> nodes;
 		std::vector<Node*> linearNodes;
 
@@ -331,12 +342,14 @@ namespace vkglTF
 		void bindBuffers(VkCommandBuffer commandBuffer);
 		void drawNode(Node* node, VkCommandBuffer commandBuffer, uint32_t renderFlags = 0);
 		void draw(VkCommandBuffer commandBuffer, uint32_t renderFlags = 0);
+		void traceRay(VkCommandBuffer commandBuffer, gvk::ptr<gvk::RaytracingPipeline> pipeline);
 		void getNodeDimensions(Node* node, glm::vec3& min, glm::vec3& max);
 		void getSceneDimensions();
 		void updateAnimation(uint32_t index, float time);
 
 		void createDescriptorsForPipeline(gvk::ptr<gvk::DescriptorAllocator> alloc,gvk::ptr<gvk::Pipeline> targetPipeline);
-		
+
+
 		Node* findNode(Node* parent, uint32_t index);
 		Node* nodeFromIndex(uint32_t index);
 

@@ -43,7 +43,7 @@ namespace vkrg
 
     opt<ResourceHandle> RenderGraph::AddGraphResource(const char* name, ResourceInfo info, bool external, VkImageLayout layout)
     {
-        vkrg_assert(external || !(info.IsImage() && layout == VK_IMAGE_LAYOUT_UNDEFINED));
+        vkrg_assert(!external || !(info.IsImage() && layout == VK_IMAGE_LAYOUT_UNDEFINED));
 
         if (FindGraphResource(name).has_value()) return std::nullopt;
 
@@ -312,11 +312,17 @@ namespace vkrg
                 {
                     m_LogicalResourceList[resource.idx].info.usages |= VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
                 }
-                if (attachment.type == RenderPassAttachment::BufferStorageInput || attachment.type == RenderPassAttachment::ImageStorageOutput)
+                if (attachment.type == RenderPassAttachment::ImageRTSampledInput)
+                {
+                    m_LogicalResourceList[resource.idx].info.usages |= VK_IMAGE_USAGE_SAMPLED_BIT;
+                }
+                if (attachment.type == RenderPassAttachment::ImageStorageInput || attachment.type == RenderPassAttachment::ImageStorageOutput
+                    || attachment.type == RenderPassAttachment::ImageRTInput || attachment.type == RenderPassAttachment::ImageRTOutput)
                 {
                     m_LogicalResourceList[resource.idx].info.usages |= VK_IMAGE_USAGE_STORAGE_BIT;
                 }
-                if (attachment.type == RenderPassAttachment::BufferStorageInput || attachment.type == RenderPassAttachment::BufferStorageOutput)
+                if (attachment.type == RenderPassAttachment::BufferStorageInput || attachment.type == RenderPassAttachment::BufferStorageOutput
+                    || attachment.type == RenderPassAttachment::BufferRTInput || attachment.type == RenderPassAttachment::BufferRTOutput)
                 {
                     m_LogicalResourceList[resource.idx].info.usages |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
                 }
@@ -684,6 +690,9 @@ namespace vkrg
                                         }
                                     }
 
+                                    // the resource can't be reused if the resource is written in the same pass
+                                    canBeAssigned = m_LogicalResourceIODenpendencies[assignedLogicalResourceIdx].resourceWriteList[0] != renderPass->idx;
+
                                     if (!canBeAssigned) break;
                                     // we don't have to check resource's write list, because the logical resource could only be assigned when its writer has been visited
                                 }
@@ -1033,6 +1042,8 @@ namespace vkrg
         std::vector<ImageLayoutStatus> physicalResourceLayouts;
         std::vector<ImageLayoutStatus> externalResourceLayouts;
 
+        ImageBarrierHelper globalBarrierHelper(m_Options.flightFrameCount);
+
         // initialize image layout lists
         for (auto physicalResource : m_PhysicalResources)
         {
@@ -1049,23 +1060,29 @@ namespace vkrg
 
             ImageBarrierHelper barrierHelper(m_Options.flightFrameCount);
 
-            if (currentMergedPass->renderPasses[0]->pass->GetType() == RenderPassType::Compute)
+            if (currentMergedPass->renderPasses[0]->pass->IsGeneralPass())
             {
                 vkrg_assert(currentMergedPass->renderPasses.size() == 1);
 
-                auto computePass = currentMergedPass->renderPasses[0];
+                auto currentPass = currentMergedPass->renderPasses[0];
 
-                info.type = RenderPassType::Compute;
+                info.type = currentMergedPass->renderPasses[0]->pass->GetType();
 
-                auto& attachments = computePass->pass->GetAttachments();
-                auto& resources = computePass->pass->GetAttachedResourceHandles();
+                auto& attachments = currentPass->pass->GetAttachments();
+                auto& resources = currentPass->pass->GetAttachedResourceHandles();
                 
                 for (uint32_t i = 0;i < attachments.size();i++)
                 {
                     auto& attachment = attachments[i];
                     auto& resource = resources[i];
 
-                    if (attachment.WriteToResource()) continue;
+                    /*
+                    if (attachment.WriteToResource() && FindLastAccessedNodeForResource(resource.idx) != currentMergedPass
+                        && FindFirstAccessedNodeForResource(resource.idx) != currentMergedPass)
+                    {
+                        continue;
+                    }
+                    */
 
                     if (attachment.IsImage())
                     {
@@ -1082,7 +1099,7 @@ namespace vkrg
                             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
                         }
                         auto assign = m_LogicalResourceAssignmentTable[resource.idx];
-                        VkImageLayout newStateLayout = computePass->pass->GetAttachmentExpectedState(attachment);
+                        VkImageLayout newStateLayout = currentPass->pass->GetAttachmentExpectedState(attachment);
                         
                         if (assign.external)
                         {
@@ -1095,7 +1112,7 @@ namespace vkrg
                         else
                         {
                             barrier.oldLayout = physicalResourceLayouts[assign.idx].Query(attachment.range.imageRange);
-                            barrier.newLayout = computePass->pass->GetAttachmentExpectedState(attachment);
+                            barrier.newLayout = currentPass->pass->GetAttachmentExpectedState(attachment);
                             physicalResourceLayouts[assign.idx].Update(attachment.range.imageRange, barrier.newLayout);
                         }
                         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1106,11 +1123,18 @@ namespace vkrg
                         auto& dependency = m_LogicalResourceIODenpendencies[resource.idx];
                         auto& writer = m_RenderPassList[dependency.resourceWriteList[0]];
                         
-                        VkPipelineStageFlagBits srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, dstStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                        VkPipelineStageFlagBits srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;//, dstStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                        VkPipelineStageFlagBits dstStage = info.type == RenderPassType::Compute ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+
+                        
 
                         if (writer.pass->GetType() == RenderPassType::Compute)
                         {
                             srcStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                        }
+                        else if (writer.pass->GetType() == RenderPassType::Raytracing)
+                        {
+                            srcStage = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
                         }
                         else
                         {
@@ -1149,13 +1173,51 @@ namespace vkrg
 
                         // TODO better source stage flag
                         // render pass will not write to buffer so we can assume the render pass ahead is compute render pass
-                        VkPipelineStageFlagBits srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, dstStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                        VkPipelineStageFlagBits srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;//, dstStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                        VkPipelineStageFlagBits dstStage = info.type == RenderPassType::Compute ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
                         barrierHelper.AddBuffer(srcStage, dstStage, barrier, handle);
                     }
                     else
                     {
                         // this branch should not be reached
                         vkrg_assert(false);
+                    }
+
+                    if (FindLastAccessedNodeForResource(resource.idx) == currentMergedPass && m_LogicalResourceList[resource.idx].finalLayout != VK_IMAGE_LAYOUT_UNDEFINED)
+                    {
+                        VkPipelineStageFlagBits srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;//, dstStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                        VkPipelineStageFlagBits dstStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+                        VkImageMemoryBarrier barrier{};
+                        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                        barrier.subresourceRange = attachment.range.imageRange;
+
+                        auto assign = m_LogicalResourceAssignmentTable[resource.idx];
+                        if (assign.external)
+                        {
+                            // queue family index/ image field will be filled at runtime  
+                            barrier.oldLayout = externalResourceLayouts[assign.idx].Query(attachment.range.imageRange);
+                            barrier.newLayout = m_LogicalResourceList[resource.idx].finalLayout;
+                            externalResourceLayouts[assign.idx].Update(attachment.range.imageRange, barrier.newLayout);
+                        }
+                        // assignment to physical resource
+                        else
+                        {
+                            barrier.oldLayout = physicalResourceLayouts[assign.idx].Query(attachment.range.imageRange);
+                            barrier.newLayout = m_LogicalResourceList[resource.idx].finalLayout;
+                            physicalResourceLayouts[assign.idx].Update(attachment.range.imageRange, barrier.newLayout);
+                        }
+
+                        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                        barrier.srcAccessMask = VK_ACCESS_NONE;
+                        barrier.dstAccessMask = VK_ACCESS_NONE;
+                        barrier.pNext = NULL;
+
+                        RenderGraphBarrier::Handle handle;
+                        handle.idx = assign.idx;
+                        handle.external = assign.external;
+
+                        globalBarrierHelper.AddImage(srcStage, dstStage, barrier, handle);
                     }
                 }
 
@@ -1441,6 +1503,10 @@ namespace vkrg
                             {
                                 srcStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
                             }
+                            else if (m_RenderPassList[writer].pass->GetType() == RenderPassType::Raytracing)
+                            {
+                                srcStage = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+                            }
 
                             // TODO better stage flag bit
                             barrierHelper.AddBuffer(srcStage, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, barrier, handle);
@@ -1535,6 +1601,11 @@ namespace vkrg
                             dependingMergedPassNodeStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
                             dependingMemoryAccessFlag = VK_ACCESS_MEMORY_WRITE_BIT;
                         }
+                        else if (dependingPassRpType == RenderPassType::Raytracing)
+                        {
+                            dependingMergedPassNodeStage = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+                            dependingMemoryAccessFlag = VK_ACCESS_MEMORY_WRITE_BIT;
+                        }
 
                         VkPipelineStageFlags currentMergedPassNodeStage = 0;
                         VkAccessFlags currentMemoryAccessFlag = 0;
@@ -1611,7 +1682,7 @@ namespace vkrg
 
             info.targetMergedPassIdx = currentMergedPass.GetId();
             
-            if (info.type == RenderPassType::Compute)
+            if (info.type != RenderPassType::Graphics)
             {
                 info.compute.barriers = barrierHelper.barriers;
             }
@@ -1622,6 +1693,8 @@ namespace vkrg
 
             m_renderGraphPassInfo.push_back(info);
         }
+
+        m_finalGlobalBarriers = globalBarrierHelper.barriers;
 
         return RenderGraphCompileState::Success;
     }
@@ -1698,6 +1771,11 @@ namespace vkrg
                     // 2. out of memory
                     vkrg_assert(res.has_value());
                     binding.buffers[i] = res.value();
+
+                    if (m_Options.setDebugName)
+                    {
+                        binding.buffers[i]->SetDebugName("Physical_Resource_" + std::to_string(physicalResourceIdx));
+                    }
                 }
                 else if (info.IsImage())
                 {
@@ -1705,13 +1783,18 @@ namespace vkrg
 
                     auto imageCI = CreateImageCreateInfo(info);
                     auto res = m_vulkanContext.ctx->CreateImage(imageCI);
+
                     // this operation shouldn't fail
                     // 2 cases might cause failure
                     // 1. some thing goes wrong with our validation checker
                     // 2. out of memory
                     vkrg_assert(res.has_value());
-
                     binding.images[i] = res.value();
+                    
+                    if (m_Options.setDebugName)
+                    {
+                        binding.images[i]->SetDebugName("Physical_Resource_" + std::to_string(physicalResourceIdx));
+                    }
                 }
                 else
                 {
@@ -1822,12 +1905,57 @@ namespace vkrg
     void RenderGraph::UpdateDirtyFrameBuffersAndBarriers()
     {
         // TODO update frame buffer according to view update
+        for (auto& finalBarrier : m_finalGlobalBarriers)
+        {
+            for (uint32_t i = 0;i != finalBarrier.imageBarriers[0].size();i++)
+            {
+                ResourceBindingInfo* binding = NULL;
+                if (finalBarrier.imageBarrierHandles[i].external)
+                {
+                    binding = &m_ExternalResourceBindings[finalBarrier.imageBarrierHandles[i].idx];
+                }
+                else
+                {
+                    binding = &m_PhysicalResourceBindings[finalBarrier.imageBarrierHandles[i].idx];
+                }
+
+                if (binding->dirtyFlag)
+                {
+                    for (uint32_t frameIdx = 0; frameIdx < m_Options.flightFrameCount; frameIdx++)
+                    {
+                        uint32_t targetImageIdx = GetResourceFrameIdx(frameIdx, finalBarrier.imageBarrierHandles[i].external);
+                        finalBarrier.imageBarriers[frameIdx][i].image = binding->images[targetImageIdx]->GetImage();
+                    }
+                }
+            }
+            for (uint32_t i = 0; i < finalBarrier.bufferBarriers[0].size(); i++)
+            {
+                ResourceBindingInfo* binding = NULL;
+                if (finalBarrier.bufferBarrierHandles[i].external)
+                {
+                    binding = &m_ExternalResourceBindings[finalBarrier.bufferBarrierHandles[i].idx];
+                }
+                else
+                {
+                    binding = &m_PhysicalResourceBindings[finalBarrier.bufferBarrierHandles[i].idx];
+                }
+
+                if (binding->dirtyFlag)
+                {
+                    for (uint32_t frameIdx = 0; frameIdx < m_Options.flightFrameCount; frameIdx++)
+                    {
+                        uint32_t targetBufferIdx = GetResourceFrameIdx(frameIdx, finalBarrier.bufferBarrierHandles[i].external);
+                        finalBarrier.bufferBarriers[frameIdx][i].buffer = binding->buffers[targetBufferIdx]->GetBuffer();
+                    }
+                }
+            }
+        }
 
         for (uint32_t renderPassIdx = 0; renderPassIdx < m_renderGraphPassInfo.size(); renderPassIdx++)
         {
             auto& passInfo = m_renderGraphPassInfo[renderPassIdx];
             auto& rpfBuffer = m_RPFrameBuffers[renderPassIdx];
-            if (passInfo.type == RenderPassType::Compute)
+            if (passInfo.IsGeneralPass())
             {
                 for (auto& barrier : passInfo.compute.barriers)
                 {
@@ -1986,7 +2114,7 @@ namespace vkrg
         // TODO main body of excution
         for (uint32_t passIdx = 0; passIdx < m_renderGraphPassInfo.size(); passIdx++)
         {
-            if (m_renderGraphPassInfo[passIdx].type == RenderPassType::Graphics)
+            if (m_renderGraphPassInfo[passIdx].IsGraphicsPass())
             {
                 auto& renderData = m_renderGraphPassInfo[passIdx].render;
                 VkFramebuffer frameBuffer = m_RPFrameBuffers[passIdx].frameBuffer[frameIdx];
@@ -2073,6 +2201,16 @@ namespace vkrg
             }
         }
 
+        if (!m_finalGlobalBarriers.empty())
+        {
+            for (uint32_t barrierIdx = 0; barrierIdx < m_finalGlobalBarriers.size(); barrierIdx++)
+            {
+                auto& barrier = m_finalGlobalBarriers[barrierIdx];
+                vkCmdPipelineBarrier(cmd, barrier.srcStage, barrier.dstStage,
+                    0, 0, NULL, barrier.bufferBarriers[frameIdx].size(), barrier.bufferBarriers[frameIdx].data(),
+                    barrier.imageBarriers[frameIdx].size(), barrier.imageBarriers[frameIdx].data());
+            }
+        }
 
 
     }
@@ -2082,7 +2220,7 @@ namespace vkrg
         m_RPFrameBuffers.resize(m_renderGraphPassInfo.size());
         for (uint32_t i = 0;i < m_renderGraphPassInfo.size(); i++)
         {
-            if (m_renderGraphPassInfo[i].type == RenderPassType::Graphics)
+            if (m_renderGraphPassInfo[i].IsGraphicsPass())
             {
                 for (uint32_t fi = 0; fi < m_Options.flightFrameCount; fi++)
                 {
@@ -2212,6 +2350,20 @@ namespace vkrg
             {
                 node = candidate;
             }
+        }
+
+        return node;
+    }
+
+    RenderGraph::DAGMergedNode RenderGraph::FindFirstAccessedNodeForResource(uint32_t logicalResourceIdx)
+    {
+        auto& dependency = m_LogicalResourceIODenpendencies[logicalResourceIdx];
+
+        DAGMergedNode node;
+        if (auto tmp = FindInvolvedMergedPass(m_RenderPassNodeList[dependency.resourceWriteList[0]]); tmp.has_value())
+        {
+            auto [rv, _] = tmp.value();
+            node = rv;
         }
 
         return node;
@@ -2549,6 +2701,7 @@ namespace vkrg
         }
 
         m_Graph->m_ExternalResourceBindings[assign.idx].images[frameIdx] = image;
+        m_Graph->m_ExternalResourceBindings[assign.idx].dirtyFlag = true;
         return true;
     }
 
@@ -2558,5 +2711,15 @@ namespace vkrg
         m_FlightFrameCount = m_Graph->m_Options.flightFrameCount;
     }
 
+
+    bool RenderGraph::RenderGraphPassInfo::IsGeneralPass()
+    {
+        return type != RenderPassType::Graphics;
+    }
+
+    bool RenderGraph::RenderGraphPassInfo::IsGraphicsPass()
+    {
+        return type == RenderPassType::Graphics;
+    }
 
 }

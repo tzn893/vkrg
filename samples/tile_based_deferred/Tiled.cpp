@@ -174,15 +174,15 @@ public:
 		ResourceInfo info;
 		info.format = VK_FORMAT_R8G8B8A8_UNORM;
 
-		rg->AddGraphResource("color", info, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		rg->AddGraphResource("material", info, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		rg->AddGraphResource("normal", info, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		rg->AddGraphResource("color", info, false);
+		rg->AddGraphResource("material", info, false);
+		rg->AddGraphResource("normal", info, false);
 
 		info.format = m_BackBufferFormat;
 		rg->AddGraphResource("backBuffer", info, true, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
 		info.format = VK_FORMAT_D24_UNORM_S8_UINT;
-		rg->AddGraphResource("depthStencil", info, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		rg->AddGraphResource("depthStencil", info, false);
 
 		/*
 		info.format = VK_FORMAT_UNDEFINED;

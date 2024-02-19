@@ -1,0 +1,138 @@
+
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+
+#include "ao_common.glsli"
+
+// clang-format off
+layout(location = 0) rayPayloadEXT hitPayload prd;
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
+layout(set = 0, binding = 1, rg32f) uniform image2D image;
+layout(set = 0, binding = 2, rgba8) uniform image2D normalTex;
+layout(set = 0, binding = 3) uniform sampler2D depthTex;
+
+layout(set = 0, binding = 4) uniform _GlobalUniforms { GlobalUniforms uni; } uni;
+// layout(push_constant) uniform _PushConstantRay { PushConstantRay pcRay; };
+// clang-format on
+
+
+
+/*
+// Create an initial random number for this thread
+vec2 rand_2_2(vec2 uv) 
+{
+    float noiseX = fract(sin(dot(uv, vec2(12.9898,78.233)      )) * 43758.5453);
+    float noiseY = fract(sin(dot(uv, vec2(12.9898,78.233) * 2.0)) * 43758.5453);
+    return vec2(noiseX, noiseY);
+}
+
+*/
+
+
+float rand(vec2 co)
+{
+    return fract(sin(dot(co.xy + float(uni.uni.randomSeed),vec2(12.9898,78.233))) * 43758.5453);
+}
+
+vec2 rand_2_2(vec2 uv)
+{
+  float r = rand(uv);
+  float g = rand(uv + vec2(1, 0.0));
+  
+  return vec2(r,g);
+}
+
+
+vec4 sampleConsineDistribution(vec2 uv, vec3 normal)
+{
+  vec2 rand2 = rand_2_2(uv);
+  float sqrt_eta_1 = sqrt(rand2.x);
+  float pi_2_eta_2 = 2 * PI * rand2.y;
+
+  float x = sqrt_eta_1 * cos(pi_2_eta_2);
+  float y = sqrt_eta_1 * sin(pi_2_eta_2);
+  float z = sqrt(1 - rand2.x);
+
+  float weight = y / PI;
+
+  vec3 c1 = cross(normal, vec3(0.0, 0.0, 1.0));
+  vec3 c2 = cross(normal, vec3(0.0, 1.0, 0.0));
+  vec3 tangent, bitangent;
+  if (length(c1)>length(c2))
+  {
+      tangent = c1;
+  }
+  else
+  {
+      tangent = c2;
+  }
+
+  tangent = normalize(tangent);
+  bitangent = normalize(cross(normal, tangent));
+
+  //rv = n * rv.y + b * rv.z + t * rv.x;
+  //return vec4(normal * y + bitangent * z + tangent * x, weight);
+  return vec4(normal * z + bitangent * y + tangent * x, z);
+}
+
+void main()
+{
+  ivec2 pixelIdx = ivec2(gl_LaunchIDEXT.xy);
+  const vec2 pixelCenter = vec2(pixelIdx) + vec2(0.5);
+  const vec2 inUV        = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
+
+  vec3  normal = normalize(imageLoad(normalTex, pixelIdx).rgb * 2.0 - 1.0);
+  float depth = texture(depthTex, inUV).r;
+  vec3  ndc = vec3(inUV * 2.0 - 1.0, depth);
+  vec4 clip = vec4(ndc, 1.0);
+  
+  vec4 view = uni.uni.projInverse * clip;
+  vec4 position = uni.uni.viewInverse * view;
+  position /= position.w;
+
+  // TODO sampleCosineDistribution(inUV, normal);
+  vec4  r3Weight = sampleConsineDistribution(inUV, normal);
+
+  
+  
+  vec4 origin    = position;
+  // vec4 target    = uni.uni.projInverse * vec4(d.x, d.y, 1, 1);
+  vec3 direction = r3Weight.xyz;//uni.uni.viewInverse * vec4(normalize(target.xyz), 0);
+
+  uint  rayFlags = gl_RayFlagsOpaqueEXT;
+  float tMin     = 0.003;
+  float tMax     = uni.uni.aoTraceDistance;
+
+  traceRayEXT(topLevelAS,     // acceleration structure
+              rayFlags,       // rayFlags
+              0xFF,           // cullMask
+              0,              // sbtRecordOffset
+              0,              // sbtRecordStride
+              0,              // missIndex
+              origin.xyz,     // ray origin
+              tMin,           // ray min range
+              direction,  // ray direction
+              tMax,           // ray max range
+              0               // payload (location = 0)
+  );
+
+  vec2 vw = imageLoad(image, pixelIdx).rg;
+  
+  if(vw.y < 65536.0)
+  {
+    vw.x += r3Weight.w * float(prd.hit);
+    vw.y += r3Weight.w;
+  }
+
+  if(uni.uni.disableAccumulation != 0)
+  {
+    vw.x = r3Weight.w * float(prd.hit);
+    vw.y = r3Weight.w;
+  }
+  
+  imageStore(image, pixelIdx, vec4(vw, 0.0, 0.0));
+}

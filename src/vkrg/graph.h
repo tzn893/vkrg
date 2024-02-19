@@ -37,6 +37,7 @@ namespace vkrg
 			style = RenderGraphRenderPassStyle::OneByOne;
 			addAutomaticTransferUsageFlag = false;
 			disableFrameOnFlight = false;
+			setDebugName = false;
 			screenWidth = 0;
 			screenHeight = 0;
 		}
@@ -50,6 +51,7 @@ namespace vkrg
 		uint32_t				   screenWidth, screenHeight;
 
 		bool					   disableFrameOnFlight;
+		bool					   setDebugName;
 	};
 
 
@@ -260,6 +262,8 @@ namespace vkrg
 		// because physical resource might be merged
 		DAGMergedNode FindLastAccessedNodeForResource(uint32_t logicalResourceIdx);
 
+		DAGMergedNode FindFirstAccessedNodeForResource(uint32_t logicalResourceIdx);
+
 		tpl<uint32_t, uint32_t, uint32_t> GetExpectedExtension(ResourceInfo::Extension ext, ResourceExtensionType type);
 
 		uint32_t GetRenderGraphPassInfoIndex(DAGMergedNode node);
@@ -334,8 +338,12 @@ namespace vkrg
 			} render;
 
 			uint32_t targetMergedPassIdx;
+
+			bool IsGeneralPass();
+			bool IsGraphicsPass();
 		};
 		std::vector<RenderGraphPassInfo> m_renderGraphPassInfo;
+		std::vector<RenderGraphBarrier> m_finalGlobalBarriers;
 
 		bool SubresourceCompability(RenderPassAttachment& lhs, RenderPassAttachment& rhs);
 		bool ResourceCompability(ResourceInfo& lhs, ResourceInfo& rhs);

@@ -96,15 +96,15 @@ public:
 		ResourceInfo info;
 		info.format = VK_FORMAT_R8G8B8A8_UNORM;
 
-		rg->AddGraphResource("color", info, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		rg->AddGraphResource("material", info, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		rg->AddGraphResource("normal", info, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		rg->AddGraphResource("color", info, false);
+		rg->AddGraphResource("material", info, false);
+		rg->AddGraphResource("normal", info, false);
 
 		info.format = m_BackBufferFormat;
 		rg->AddGraphResource("backBuffer", info, true, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
 		info.format = VK_FORMAT_D24_UNORM_S8_UINT;
-		rg->AddGraphResource("depthStencil", info, false, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		rg->AddGraphResource("depthStencil", info, false);
 
 		deferredPassHandle = rg->AddGraphRenderPass("deferred pass", RenderPassType::Graphics).value();
 		deferredShadingHandle = rg->AddGraphRenderPass("deferred shading", RenderPassType::Graphics).value();
@@ -176,40 +176,7 @@ public:
 
 	void IntializeLighting()
 	{
-		/*
-		glm::vec4 vec;
-		vec.w = LIGHT_TYPE_POINT;
-		lightData.count = MAX_LIGHT_COUNT;
 
-		vkglTF::BoundingBox box = model.GetBox();
-
-		float x_grid = (box.upper.x - box.lower.x) / GRID_COUNT;
-		float z_grid = (box.upper.z - box.lower.z) / GRID_COUNT;
-		float y_grid = (box.upper.y - box.lower.y) / GRID_COUNT * 4;
-
-		sizeof(Light);
-
-		glm::vec3 lower = box.lower;
-		for (uint32_t y = 0; y < GRID_HEIGHT; y++)
-		{
-			for (uint32_t z = 0; z < GRID_COUNT; z++)
-			{
-				for (uint32_t x = 0; x < GRID_COUNT; x++)
-				{
-					uint32_t lightIdx = x + z * GRID_COUNT + y * GRID_COUNT * GRID_COUNT;
-					
-					if (lightIdx >= MAX_LIGHT_COUNT)
-					{
-						break;
-					}
-
-					glm::vec3 pos = lower + glm::vec3(x * x_grid, y * y_grid, z * z_grid);
-					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos + glm::vec3(0, 1, 0), glm::vec3(0.1, 0.1, 0.1));
-				}
-			}
-		}
-		*/
-		
 		glm::vec4 vec;
 		vec.w = LIGHT_TYPE_POINT;
 		lightData.count = GRID_COUNT * GRID_COUNT * 4;
@@ -236,11 +203,19 @@ public:
 						break;
 					}
 					glm::vec3 pos = lower + glm::vec3(x * x_grid, 1 + y_grid * y, z * z_grid);
-					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos, glm::vec3(1, 1, 1) * 2.0f, 1);
+					lightData.lights[lightIdx] = MakeLight(LIGHT_TYPE_POINT, pos, glm::vec3(1, 1, 1) * 3.0f, 3);
 				}
 			}
 		}
-		
+
+		/*
+		glm::vec4 vec;
+		vec.w = LIGHT_TYPE_POINT;
+
+		lightData.count = 1;
+		lightData.lights[0] = MakeLight(LIGHT_TYPE_POINT, glm::vec3(0, 1, 0), glm::vec3(10, 10, 10), 1.5);
+		*/
+
 	}
 
 	virtual bool CustomInitialize() override

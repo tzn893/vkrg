@@ -31,7 +31,14 @@ namespace vkrg
 
 			BufferStorageInput,
 			BufferStorageOutput,
-			BufferInput
+			BufferInput,
+
+			ImageRTSampledInput,
+			ImageRTInput,
+			ImageRTOutput,
+
+			BufferRTInput,
+			BufferRTOutput,
 		} type;
 
 		VkImageViewType    viewType;
@@ -55,6 +62,7 @@ namespace vkrg
 
 	enum class RenderPassType
 	{
+		Raytracing,
 		Graphics,
 		Compute
 	};
@@ -130,6 +138,13 @@ namespace vkrg
 		opt<RenderPassAttachment> AddImageStorageInput(const char* name, ImageSlice range, VkImageViewType    viewType);
 		opt<RenderPassAttachment> AddImageStorageOutput(const char* name, ImageSlice range, VkImageViewType    viewType);
 
+		opt<RenderPassAttachment> AddImageRTSampledInput(const char* name, ImageSlice range, VkImageViewType viewType);
+		opt<RenderPassAttachment> AddImageRTInput(const char* name, ImageSlice range, VkImageViewType viewType);
+		opt<RenderPassAttachment> AddImageRTOutput(const char* name, ImageSlice range, VkImageViewType viewType);
+
+		opt<RenderPassAttachment> AddBufferRTInput(const char* name, BufferSlice range);
+		opt<RenderPassAttachment> AddBufferRTOutput(const char* name, BufferSlice range);
+
 		opt<RenderPassAttachment> AddBufferStorageInput(const char* name, BufferSlice range);
 		opt<RenderPassAttachment> AddBufferStorageOutput(const char* name, BufferSlice range);
 		opt<RenderPassAttachment> AddBufferInput(const char* name, BufferSlice range);
@@ -153,6 +168,8 @@ namespace vkrg
 		const std::vector<RenderPassAttachment>& GetAttachments();
 
 		RenderPassType GetType();
+		// oppsite to graphics pass(compute pass and ray tracing pass)
+		bool		   IsGeneralPass();
 
 	private:
 		std::string name;

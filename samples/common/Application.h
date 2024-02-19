@@ -20,6 +20,7 @@ protected:
 	virtual void CreateRenderGraph() = 0;
 
 	virtual void MainLoop(VkCommandBuffer cmd, uint32_t imageIdx) {};
+	virtual void CameraMoveEvent() { }
 
 	ptr<gvk::CommandQueue> queue;
 	VkFence				   fences[4] = { NULL };

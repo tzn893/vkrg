@@ -91,6 +91,11 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
+		if (m_RenderPassType != RenderPassType::Graphics)
+		{
+			return std::nullopt;
+		}
+
 		if (range.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT) return std::nullopt;
 
 		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
@@ -118,6 +123,11 @@ namespace vkrg {
 			handle = res.value();
 		}
 		else
+		{
+			return std::nullopt;
+		}
+
+		if (m_RenderPassType != RenderPassType::Graphics)
 		{
 			return std::nullopt;
 		}
@@ -154,6 +164,11 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
+		if (m_RenderPassType == RenderPassType::Raytracing)
+		{
+			return std::nullopt;
+		}
+
 		ResourceInfo resInfo = m_Graph->GetResourceInfo(handle);
 
 		if ((range.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) == 0) return std::nullopt;
@@ -182,6 +197,11 @@ namespace vkrg {
 			handle = res.value();
 		}
 		else
+		{
+			return std::nullopt;
+		}
+
+		if (m_RenderPassType == RenderPassType::Raytracing)
 		{
 			return std::nullopt;
 		}
@@ -215,6 +235,11 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
+		if (m_RenderPassType == RenderPassType::Raytracing)
+		{
+			return std::nullopt;
+		}
+
 		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
 			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
 			return std::nullopt;
@@ -244,6 +269,11 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
+		if (m_RenderPassType == RenderPassType::Raytracing)
+		{
+			return std::nullopt;
+		}
+
 		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
 			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
 			return std::nullopt;
@@ -254,6 +284,184 @@ namespace vkrg {
 		attachment.range.imageRange = range;
 		attachment.targetPass = this;
 		attachment.viewType = viewType;
+
+		m_Attachments.push_back(attachment);
+		m_AttachmentResourceHandle.push_back(handle);
+
+		return attachment;
+	}
+
+	opt<RenderPassAttachment> RenderPass::AddImageRTSampledInput(const char* name, ImageSlice range, VkImageViewType viewType)
+	{
+
+		ResourceHandle handle;
+		if (auto res = m_Graph->FindGraphResource(name); res.has_value())
+		{
+			handle = res.value();
+		}
+		else
+		{
+			return std::nullopt;
+		}
+
+		if (m_RenderPassType != RenderPassType::Raytracing)
+		{
+			return std::nullopt;
+		}
+
+		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
+			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
+			return std::nullopt;
+
+		RenderPassAttachment attachment;
+		attachment.idx = m_Attachments.size();
+		attachment.type = RenderPassAttachment::ImageRTSampledInput;
+		attachment.range.imageRange = range;
+		attachment.targetPass = this;
+		attachment.viewType = viewType;
+
+		m_Attachments.push_back(attachment);
+		m_AttachmentResourceHandle.push_back(handle);
+
+		return attachment;
+	}
+
+	opt<RenderPassAttachment> RenderPass::AddImageRTInput(const char* name, ImageSlice range, VkImageViewType viewType)
+	{
+		ResourceHandle handle;
+		if (auto res = m_Graph->FindGraphResource(name); res.has_value())
+		{
+			handle = res.value();
+		}
+		else
+		{
+			return std::nullopt;
+		}
+
+		if (m_RenderPassType != RenderPassType::Raytracing)
+		{
+			return std::nullopt;
+		}
+
+		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
+			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
+			return std::nullopt;
+
+		RenderPassAttachment attachment;
+		attachment.idx = m_Attachments.size();
+		attachment.type = RenderPassAttachment::ImageRTInput;
+		attachment.range.imageRange = range;
+		attachment.targetPass = this;
+		attachment.viewType = viewType;
+
+		m_Attachments.push_back(attachment);
+		m_AttachmentResourceHandle.push_back(handle);
+
+		return attachment;
+	}
+
+	opt<RenderPassAttachment> RenderPass::AddImageRTOutput(const char* name, ImageSlice range, VkImageViewType viewType)
+	{
+		ResourceHandle handle;
+		if (auto res = m_Graph->FindGraphResource(name); res.has_value())
+		{
+			handle = res.value();
+		}
+		else
+		{
+			return std::nullopt;
+		}
+
+		if (m_RenderPassType != RenderPassType::Raytracing)
+		{
+			return std::nullopt;
+		}
+
+		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
+			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
+			return std::nullopt;
+
+		RenderPassAttachment attachment;
+		attachment.idx = m_Attachments.size();
+		attachment.type = RenderPassAttachment::ImageRTOutput;
+		attachment.range.imageRange = range;
+		attachment.targetPass = this;
+		attachment.viewType = viewType;
+
+		m_Attachments.push_back(attachment);
+		m_AttachmentResourceHandle.push_back(handle);
+
+		return attachment;
+	}
+
+	opt<RenderPassAttachment> RenderPass::AddBufferRTInput(const char* name, BufferSlice range)
+	{
+		ResourceHandle handle;
+		if (auto res = m_Graph->FindGraphResource(name); res.has_value())
+		{
+			handle = res.value();
+		}
+		else
+		{
+			return std::nullopt;
+		}
+		
+		if (m_RenderPassType != RenderPassType::Raytracing)
+		{
+			return std::nullopt;
+		}
+
+
+		auto resInfo = m_Graph->GetResourceInfo(handle);
+		if (range.size == 0xffffffff)
+		{
+			range.size = resInfo.ext.buffer.size;
+		}
+
+		if (!CheckAttachmentCompality(range, resInfo)) return std::nullopt;
+
+		RenderPassAttachment attachment{};
+		attachment.idx = m_Attachments.size();
+		attachment.type = RenderPassAttachment::BufferRTInput;
+		attachment.range.bufferRange = range;
+		attachment.targetPass = this;
+
+		m_Attachments.push_back(attachment);
+		m_AttachmentResourceHandle.push_back(handle);
+
+		return attachment;
+	}
+
+	opt<RenderPassAttachment> RenderPass::AddBufferRTOutput(const char* name, BufferSlice range)
+	{
+		ResourceHandle handle;
+		if (auto res = m_Graph->FindGraphResource(name); res.has_value())
+		{
+			handle = res.value();
+		}
+		else
+		{
+			return std::nullopt;
+		}
+
+		if (m_RenderPassType != RenderPassType::Raytracing)
+		{
+			return std::nullopt;
+		}
+
+		auto resInfo = m_Graph->GetResourceInfo(handle);
+		if (range.size == 0xffffffff)
+		{
+			range.size = resInfo.ext.buffer.size;
+		}
+
+		if (!CheckAttachmentCompality(range, resInfo)) return std::nullopt;
+
+		RenderPassAttachment attachment{};
+		attachment.idx = m_Attachments.size();
+		attachment.type = RenderPassAttachment::BufferRTOutput;
+		attachment.range.bufferRange = range;
+		attachment.targetPass = this;
 
 		m_Attachments.push_back(attachment);
 		m_AttachmentResourceHandle.push_back(handle);
@@ -279,6 +487,11 @@ namespace vkrg {
 			range.size = resInfo.ext.buffer.size;
 		}
 
+		if (m_RenderPassType == RenderPassType::Raytracing)
+		{
+			return std::nullopt;
+		}
+
 		if (!CheckAttachmentCompality(range, resInfo)) return std::nullopt;
 
 		RenderPassAttachment attachment{};
@@ -301,6 +514,11 @@ namespace vkrg {
 			handle = res.value();
 		}
 		else
+		{
+			return std::nullopt;
+		}
+
+		if (m_RenderPassType == RenderPassType::Raytracing)
 		{
 			return std::nullopt;
 		}
@@ -333,6 +551,11 @@ namespace vkrg {
 			handle = res.value();
 		}
 		else
+		{
+			return std::nullopt;
+		}
+
+		if (m_RenderPassType == RenderPassType::Raytracing)
 		{
 			return std::nullopt;
 		}
@@ -381,7 +604,8 @@ namespace vkrg {
 		{
 			initGuess = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 		}
-		else if (idx.type == RenderPassAttachment::Type::ImageColorInput)
+		else if (idx.type == RenderPassAttachment::Type::ImageColorInput 
+			|| idx.type == RenderPassAttachment::Type::ImageRTSampledInput)
 		{
 			initGuess = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		}
@@ -389,13 +613,20 @@ namespace vkrg {
 		{
 			initGuess = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		}
-		else if (idx.type == RenderPassAttachment::Type::ImageStorageOutput)
+		else if (idx.type == RenderPassAttachment::Type::ImageStorageOutput
+			||  idx.type == RenderPassAttachment::Type::ImageRTOutput)
 		{
 			initGuess = VK_IMAGE_LAYOUT_GENERAL;
 		}
-		else if (idx.type == RenderPassAttachment::Type::ImageStorageInput)
+		/*
+		The image subresources for a storage image must be in the VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR or
+		VK_IMAGE_LAYOUT_GENERAL layout in order to access its data in a shader.
+		*/
+		else if (idx.type == RenderPassAttachment::Type::ImageStorageInput || 
+			idx.type == RenderPassAttachment::Type::ImageRTInput)
 		{
-			initGuess = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+			// initGuess = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+			initGuess = VK_IMAGE_LAYOUT_GENERAL;
 		}
 		else if (idx.type == RenderPassAttachment::Type::ImageDepthInput)
 		{
@@ -413,7 +644,10 @@ namespace vkrg {
 		VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, _1;
 		VkAttachmentStoreOp _2, _3;
 
-		m_RenderPassInterface->GetAttachmentStoreLoadOperation(idx.idx, loadOp, _2, _1, _3);
+		if (m_RenderPassType == RenderPassType::Graphics)
+		{
+			m_RenderPassInterface->GetAttachmentStoreLoadOperation(idx.idx, loadOp, _2, _1, _3);
+		}
 
 		return loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR;
 	}
@@ -496,19 +730,20 @@ namespace vkrg {
 	bool RenderPassAttachment::WriteToResource() const
 	{
 		return type == RenderPassAttachment::ImageColorOutput || type == RenderPassAttachment::ImageDepthOutput || type == RenderPassAttachment::ImageStorageOutput
-			|| type == RenderPassAttachment::BufferStorageOutput;
+			|| type == RenderPassAttachment::BufferStorageOutput || type == RenderPassAttachment::ImageRTOutput;
 	}
 
 	bool RenderPassAttachment::ReadFromResource() const
 	{
 		return type == RenderPassAttachment::ImageColorInput || type == RenderPassAttachment::BufferStorageInput || type == RenderPassAttachment::ImageStorageInput
-			|| type == RenderPassAttachment::ImageDepthInput;
+			|| type == RenderPassAttachment::ImageDepthInput || type == RenderPassAttachment::ImageRTInput || type == RenderPassAttachment::ImageRTSampledInput;
 	}
 
 	bool RenderPassAttachment::IsImage() const
 	{
 		return type == RenderPassAttachment::ImageColorInput || type == RenderPassAttachment::ImageDepthOutput || type == RenderPassAttachment::ImageStorageOutput
-			|| type == RenderPassAttachment::ImageColorOutput || type == RenderPassAttachment::ImageStorageInput;
+			|| type == RenderPassAttachment::ImageColorOutput || type == RenderPassAttachment::ImageStorageInput || type == RenderPassAttachment::ImageRTSampledInput
+			|| type == RenderPassAttachment::ImageRTInput || type == RenderPassAttachment::ImageRTOutput;
 	}
 
 	bool RenderPassAttachment::IsBuffer() const
@@ -519,6 +754,10 @@ namespace vkrg {
 	RenderPassType RenderPass::GetType()
 	{
 		return m_RenderPassType;
+	}
+	bool RenderPass::IsGeneralPass()
+	{
+		return GetType() != RenderPassType::Graphics;
 	}
 	RenderPassRuntimeContext::RenderPassRuntimeContext(RenderGraph* graph, uint32_t frameIdx, uint32_t passIdx)
 		:m_Graph(graph), m_FrameIdx(frameIdx), m_passIdx(passIdx)

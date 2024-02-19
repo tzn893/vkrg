@@ -1319,7 +1319,6 @@ void vkglTF::Model::loadFromFile(std::string filename, gvk::ptr<gvk::Context> ct
 	std::vector<uint32_t> attributeOffset((uint32_t)VertexComponent::MaxEnum, 0);
 	std::vector<uint32_t> attributeStride((uint32_t)VertexComponent::MaxEnum, 0);
 	std::vector<bool> attributeUsed((uint32_t)VertexComponent::MaxEnum, false);
-
 	
 
 	uint32_t total_offset = 0;
@@ -1403,19 +1402,40 @@ void vkglTF::Model::loadFromFile(std::string filename, gvk::ptr<gvk::Context> ct
 	vertexStaging->Write(assambledVertexBuffer.data(), 0, vertexBufferSize);
 	indexStaging->Write(indexBuffer.data(), 0, indexBufferSize);
 
-	vertices.buffer = ctx->CreateBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vertexBufferSize, GVK_HOST_WRITE_NONE).value();
-	indices.buffer = ctx->CreateBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, indexBufferSize, GVK_HOST_WRITE_NONE).value();
+	VkBufferUsageFlags vertexBufferFlag = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT
+		, indiceBufferFlag = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
+	vertices.buffer = ctx->CreateBuffer(vertexBufferFlag, vertexBufferSize, GVK_HOST_WRITE_NONE).value();
+	indices.buffer = ctx->CreateBuffer(indiceBufferFlag, indexBufferSize, GVK_HOST_WRITE_NONE).value();
+
+	gvk::ptr<gvk::Buffer> indexAccelBuffer, vertexAccelBuffer;
+
+	if ((fileLoadingFlags & FileLoadingFlags::RayTracingSupport) == FileLoadingFlags::RayTracingSupport)
+	{
+		vertexAccelBuffer = ctx->CreateBuffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			vertexBufferSize, GVK_HOST_WRITE_NONE).value();
+		indexAccelBuffer = ctx->CreateBuffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			indexBufferSize, GVK_HOST_WRITE_NONE).value();
+	}
 
 	auto copy = [&](VkCommandBuffer copyCmd)
 	{
 		VkBufferCopy copyRegion = {};
 		copyRegion.size = vertexBufferSize;
 		vkCmdCopyBuffer(copyCmd, vertexStaging->GetBuffer(), vertices.buffer->GetBuffer(), 1, &copyRegion);
-
+		if ((fileLoadingFlags & FileLoadingFlags::RayTracingSupport) == FileLoadingFlags::RayTracingSupport)
+		{
+			vkCmdCopyBuffer(copyCmd, vertexStaging->GetBuffer(), vertexAccelBuffer->GetBuffer(), 1, &copyRegion);
+		}
+		
 		copyRegion.size = indexBufferSize;
 		vkCmdCopyBuffer(copyCmd, indexStaging->GetBuffer(), indices.buffer->GetBuffer(), 1, &copyRegion);
+		if ((fileLoadingFlags & FileLoadingFlags::RayTracingSupport) == FileLoadingFlags::RayTracingSupport)
+		{
+			vkCmdCopyBuffer(copyCmd, indexStaging->GetBuffer(), indexAccelBuffer->GetBuffer(), 1, &copyRegion);
+		}
 	};
+
 	ctx->PresentQueue()->SubmitTemporalCommand(copy, gvk::SemaphoreInfo(), NULL, true);
 
 	vertexStaging = nullptr;
@@ -1423,22 +1443,69 @@ void vkglTF::Model::loadFromFile(std::string filename, gvk::ptr<gvk::Context> ct
 
 	getSceneDimensions();
 
-	// Setup descriptors
-	uint32_t uboCount{ 0 };
-	uint32_t imageCount{ 0 };
-	for (auto node : linearNodes) {
-		if (node->mesh) {
-			uboCount++;
+	vkrg_assert(attributeUsed[(uint32_t)VertexComponent::Position]);
+	uint32_t positionAttributeOffset = attributeOffset[(uint32_t)VertexComponent::Position];
+
+	// create bottom level acceleration structures and top level acceleration structures
+	if ((fileLoadingFlags & FileLoadingFlags::RayTracingSupport) == FileLoadingFlags::RayTracingSupport)
+	{
+		bool loadOpaque = true, loadTransparent = true;
+		if ((fileLoadingFlags & FileLoadingFlags::RayTracingGeometryFlagSet) != 0)
+		{
+			loadOpaque = (fileLoadingFlags & FileLoadingFlags::RayTracingOpaque) == FileLoadingFlags::RayTracingOpaque;
+			loadTransparent = (fileLoadingFlags & FileLoadingFlags::RayTracingTransparent) == FileLoadingFlags::RayTracingTransparent;
 		}
-	}
-	for (auto material : materials) {
-		if (material.baseColorTexture != nullptr) {
-			imageCount++;
+
+		std::vector<gvk::GvkTopAccelerationStructureInstance> instances;
+		uint32_t instanceIdx = 0;
+		for (auto n : linearNodes)
+		{
+			if (n->mesh)
+			{
+				for (auto p : n->mesh->primitives)
+				{
+					if (p->material.alphaMode == Material::ALPHAMODE_OPAQUE && !loadOpaque)
+					{
+						continue;
+					}
+					if (p->material.alphaMode == Material::ALPHAMODE_BLEND && !loadTransparent)
+					{
+						continue;
+					}
+					if (p->material.alphaMode == Material::ALPHAMODE_MASK) continue;
+
+					gvk::GvkBottomAccelerationStructureGeometryTriangles triangles;
+					triangles.vertexBuffer = vertexAccelBuffer;
+					triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+					triangles.vertexStride = total_offset;
+					triangles.maxVertex = p->vertexCount + p->firstVertex;
+					triangles.vertexPositionAttributeOffset = positionAttributeOffset;
+					triangles.firstVertexIndexOffset = 0;
+					triangles.indexCount = p->indexCount;
+					triangles.indexOffset = p->firstIndex;
+					// TODO transform offset
+					triangles.transformOffset = 0;
+					triangles.indiceType = VK_INDEX_TYPE_UINT32;
+					triangles.indiceBuffer = indexAccelBuffer;
+					triangles.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+
+					auto blas = ctx->CreateBottomAccelerationStructure(gvk::View(&triangles, 0, 1)).value();
+					as.blases.push_back(blas);
+
+					gvk::GvkTopAccelerationStructureInstance instance;
+					instance.blas = blas;
+					instance.flags = 0;
+					instance.instanceCustomIndex = instanceIdx++;
+					instance.mask = 0xff;
+					instance.trans = gvk::VkTransformMatrix::Identity;
+
+					instances.push_back(instance);
+				}
+			}
 		}
+
+		as.tlas = ctx->CreateTopAccelerationStructure(gvk::View(instances)).value();
 	}
-	std::vector<VkDescriptorPoolSize> poolSizes = {
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uboCount },
-	};
 }
 
 void vkglTF::Model::bindBuffers(VkCommandBuffer commandBuffer)
@@ -1496,6 +1563,12 @@ void vkglTF::Model::draw(VkCommandBuffer commandBuffer, uint32_t renderFlags)
 	for (auto& node : nodes) {
 		drawNode(node, commandBuffer, renderFlags);
 	}
+}
+
+void vkglTF::Model::traceRay(VkCommandBuffer commandBuffer, gvk::ptr<gvk::RaytracingPipeline> pipeline)
+{
+
+
 }
 
 void vkglTF::Model::getNodeDimensions(Node *node, glm::vec3 &min, glm::vec3 &max)

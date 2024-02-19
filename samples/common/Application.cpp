@@ -39,18 +39,22 @@ void Application::Run()
 		if (window->KeyHold(GVK_KEY_W))
 		{
 			cameraPos -= speed * delta_time * cameraFront;
+			CameraMoveEvent();
 		}
 		if (window->KeyHold(GVK_KEY_S))
 		{
 			cameraPos += speed * delta_time * cameraFront;
+			CameraMoveEvent();
 		}
 		if (window->KeyHold(GVK_KEY_A))
 		{
 			cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * speed * delta_time;
+			CameraMoveEvent();
 		}
 		if (window->KeyHold(GVK_KEY_D))
 		{
 			cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * speed * delta_time;
+			CameraMoveEvent();
 		}
 
 		if (window->KeyHold(GVK_MOUSE_1) && window->MouseMove())
@@ -66,6 +70,7 @@ void Application::Run()
 			front.y = sin(glm::radians(pitch));
 			front.x = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
 			cameraFront = glm::normalize(front);
+			CameraMoveEvent();
 		}
 
 
@@ -132,6 +137,7 @@ void Application::Run()
 			fences[current_fence_idx]);
 
 		context->Present(gvk::SemaphoreInfo().Wait(color_output_finish, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
+		context->WaitForDeviceIdle();
 
 		window->UpdateWindow();
 	}
