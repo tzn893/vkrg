@@ -839,7 +839,7 @@ namespace vkrg
             // member of subresourceRange must include both VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT
             if (subresource.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT || subresource.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT)
             {
-                subresource.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+                subresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             }
 
             SubresourceRange(subresource, op);
@@ -2139,8 +2139,8 @@ namespace vkrg
                 fullScreen.offset.y = 0;
 
                 VkViewport vp;
-                vp.height = w;
-                vp.width = h;
+                vp.height = h;
+                vp.width = w;
                 vp.x = 0;
                 vp.y = 0;
                 vp.minDepth = 0;
