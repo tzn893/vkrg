@@ -79,7 +79,12 @@ namespace vkrg
         return handle;
     }
 
-    tpl<RenderGraphCompileState, std::string> RenderGraph::Compile(RenderGraphCompileOptions options, RenderGraphDeviceContext ctx)
+	void RenderGraph::AddEdge(RenderPassHandle outPass, RenderPassHandle inPass)
+	{
+        m_ExtraPassEdges.push_back({ outPass.idx, inPass.idx });
+	}
+
+	tpl<RenderGraphCompileState, std::string> RenderGraph::Compile(RenderGraphCompileOptions options, RenderGraphDeviceContext ctx)
     {
         m_vulkanContext = ctx;
 
@@ -419,6 +424,14 @@ namespace vkrg
                     m_Graph.AddEdge(writeDenpendencyNode, readDenpendencyNode);
                 }
             }
+        }
+        
+        for (auto extraEdge : m_ExtraPassEdges)
+        {
+            DAGNode outPassNode = m_RenderPassNodeList[extraEdge.outPassIdx];
+            DAGNode inPassNode = m_RenderPassNodeList[extraEdge.inPassIdx];
+
+            m_Graph.AddEdge(outPassNode, inPassNode);
         }
 
 

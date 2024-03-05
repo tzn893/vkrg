@@ -169,6 +169,8 @@ namespace vkrg
 		opt<ResourceHandle>	  AddGraphResource(const char* name, ResourceInfo info, bool external, VkImageLayout expectedFinalLayout = VK_IMAGE_LAYOUT_UNDEFINED);
 		opt<RenderPassHandle> AddGraphRenderPass(const char* name, RenderPassType type, RenderPassExtension expectedExt = RenderPassExtension());
 
+		void				  AddEdge(RenderPassHandle outPass, RenderPassHandle inPass);
+
 		tpl<RenderGraphCompileState, std::string> Compile(RenderGraphCompileOptions options, RenderGraphDeviceContext ctx);
 
 		RenderGraphScope	  Scope(const char* name);
@@ -220,7 +222,13 @@ namespace vkrg
 		std::unordered_map<std::string, uint32_t> m_LogicalResourceTable;
 		std::vector<LogicalResource> m_LogicalResourceList;
 
+		struct ExtraPassEdge
+		{
+			uint32_t outPassIdx;
+			uint32_t inPassIdx;
+		};
 
+		std::vector<ExtraPassEdge> m_ExtraPassEdges;
 		std::unordered_map<std::string, uint32_t> m_RenderPassTable;
 		std::vector<RenderPassHandle> m_RenderPassList;
 
