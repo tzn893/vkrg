@@ -557,7 +557,7 @@ void MyDeferredShading::OnRender(RenderPassRuntimeContext& ctx, VkCommandBuffer 
 
 int main()
 {
-	constexpr uint32_t initWidth = 1000, initHeight = 1000;
+	constexpr uint32_t initWidth = 1600, initHeight = 900;
 	std::make_shared<RTAOApplication>(initWidth, initHeight)->Run();
 
 	return 0;

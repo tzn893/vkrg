@@ -2672,6 +2672,7 @@ namespace vkrg
         if (assign.Invalid() || (assign.external && m_Target != External) || (!assign.external && m_Target != Physical)) return false;
         
         m_Graph->m_ExternalResourceBindings[assign.idx].buffers[frameIdx] = buffer;
+        m_Graph->m_ExternalResourceBindings[assign.idx].dirtyFlag = true;
 
         return true;
     }

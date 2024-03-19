@@ -47,7 +47,7 @@ vec2 rand_2_2(vec2 uv)
 }
 
 
-vec4 sampleConsineDistribution(vec2 uv, vec3 normal)
+vec4 sampleConsineDistribution(vec2 uv, vec3 normal) 
 {
   vec2 rand2 = rand_2_2(uv);
   float sqrt_eta_1 = sqrt(rand2.x);
@@ -104,7 +104,7 @@ void main()
   vec3 direction = r3Weight.xyz;//uni.uni.viewInverse * vec4(normalize(target.xyz), 0);
 
   uint  rayFlags = gl_RayFlagsOpaqueEXT;
-  float tMin     = 0.003;
+  float tMin     = max(0.1 * view.z, 0.001);
   float tMax     = uni.uni.aoTraceDistance;
 
   traceRayEXT(topLevelAS,     // acceleration structure
