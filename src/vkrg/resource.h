@@ -10,6 +10,12 @@ namespace vkrg
 		Buffer
 	};
 
+	enum class ResourceExtraFlag
+	{
+		KeepContentFromLastFrame = 1 << 31,
+		AllExtraFlags = KeepContentFromLastFrame
+	};
+
 
 	struct ResourceInfo
 	{
@@ -52,19 +58,19 @@ namespace vkrg
 			expectedDimension = VK_IMAGE_TYPE_MAX_ENUM;
 		}
 
-		bool IsBuffer() const 
+		bool IsBuffer() const
 		{
 			return extType == ResourceExtensionType::Buffer;
 		}
 
-		bool IsImage() const 
+		bool IsImage() const
 		{
 			return !IsBuffer();
 		}
 	};
 
 	using ImageSlice = VkImageSubresourceRange;
-	
+
 	struct BufferSlice
 	{
 		uint64_t size;

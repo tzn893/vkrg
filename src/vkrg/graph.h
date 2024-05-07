@@ -68,20 +68,20 @@ namespace vkrg
 		ResourceInfo   info;
 		VkImageLayout  finalLayout;
 	};
-	
+
 
 	struct RenderPassHandle
 	{
 		ptr<RenderPass> pass;
 		uint32_t		idx;
 	};
-	
+
 	struct RenderGraphDeviceContext
 	{
 		ptr<gvk::Context> ctx;
 	};
 
-	class RenderGraphScope 
+	class RenderGraphScope
 	{
 	public:
 		RenderGraphScope(const char* name, RenderGraph* graph);
@@ -104,13 +104,13 @@ namespace vkrg
 		std::string name;
 		RenderGraph* graph;
 	};
-	
+
 
 	class RenderGraphDataFrame
 	{
 		friend class RenderGraph;
 	public:
-		
+
 		bool BindBuffer(const char* name, uint32_t frameIdx, ptr<gvk::Buffer> buffer);
 
 		bool BindImage(const char* name, uint32_t frameIdx, ptr<gvk::Image> image);
@@ -188,12 +188,12 @@ namespace vkrg
 		static constexpr uint32_t invalidIdx = 0xffffffff;
 
 		RenderGraphRuntimeState	ValidateResourceBinding(std::string& msg);
-		
+
 		RenderGraphCompileState ValidateCompileOptions(std::string& msg);
 		RenderGraphCompileState ValidateRenderPasses(std::string& msg);
 		RenderGraphCompileState CollectedResourceDependencies(std::string& msg);
 		RenderGraphCompileState BuildGraph(std::string& msg);
-		
+
 		RenderGraphCompileState ScheduleMergedGraph(std::string& msg);
 		RenderGraphCompileState ScheduleOneByOneGraph(std::string& msg);
 
@@ -215,7 +215,7 @@ namespace vkrg
 		void					PostCompile();
 
 
-		uint32_t				GetResourceFrameIdx(uint32_t idx,bool res);
+		uint32_t				GetResourceFrameIdx(uint32_t idx, bool res);
 
 		RenderGraphCompileOptions m_Options;
 
@@ -284,7 +284,7 @@ namespace vkrg
 				external = false;
 			}
 
-			uint32_t idx ;
+			uint32_t idx;
 			bool	 external;
 
 			bool Invalid()
@@ -295,12 +295,14 @@ namespace vkrg
 
 		struct PhysicalResource
 		{
+			VkImageLayout finalLayout;
 			ResourceInfo info;
 			std::vector<uint32_t> logicalResources;
 		};
 
 		struct ExternalResource
 		{
+			VkImageLayout finalLayout;
 			ResourceHandle handle;
 			std::string	   name;
 		};
@@ -309,13 +311,13 @@ namespace vkrg
 		std::vector<PhysicalResource> m_PhysicalResources;
 		std::vector<ExternalResource> m_ExternalResources;
 
-		
+
 		RenderGraphDeviceContext m_vulkanContext;
 		struct RenderGraphPassInfo
 		{
 			RenderPassType type;
 			//std::vector<uint32_t> attachmentIndices;
-			
+
 			// for compute passes
 			struct Compute
 			{
@@ -329,7 +331,7 @@ namespace vkrg
 				ResourceAssignment assign;
 				ImageSlice		   subresource;
 			};
-			
+
 			// table records witch frame buffer does the logical resource attachmented to 
 			// for rernder passes
 			struct Render
@@ -341,7 +343,7 @@ namespace vkrg
 
 				std::vector<FBAttachment> fbAttachmentIdx;
 				std::vector<VkClearValue> fbClearValues;
-				
+
 				RenderPassExtension expectedExtension;
 			} render;
 
@@ -357,7 +359,7 @@ namespace vkrg
 		bool ResourceCompability(ResourceInfo& lhs, ResourceInfo& rhs);
 		bool CheckImageUsageCompability(VkFormat lhs, VkImageUsageFlags usages);
 		bool CheckBufferUsageCompability(VkFormat lhs, VkBufferUsageFlags usages);
-	
+
 		// one render graph can only compile once
 		bool m_HaveCompiled = false;
 
@@ -374,7 +376,7 @@ namespace vkrg
 		{
 			struct View
 			{
-				union 
+				union
 				{
 					VkImageView imageView;
 					BufferView bufferView;
@@ -406,7 +408,7 @@ namespace vkrg
 		std::vector<RPFrameBuffer>    m_RPFrameBuffers;
 
 		static constexpr VkImageTiling m_DefaultImageTiling = VK_IMAGE_TILING_OPTIMAL;
-};
+	};
 
 
 }

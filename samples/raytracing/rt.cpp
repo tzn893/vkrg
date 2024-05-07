@@ -177,9 +177,11 @@ public:
 		rg->AddGraphResource("normal", info, false);
 
 		info.format = VK_FORMAT_R32G32_SFLOAT;
-		rg->AddGraphResource("rtAO", info, false);
+		info.extraFlags = (uint32_t)ResourceExtraFlag::KeepContentFromLastFrame;
+		rg->AddGraphResource("rtAO", info, false, VK_IMAGE_LAYOUT_GENERAL);
 
 		info.format = m_BackBufferFormat;
+		info.extraFlags = 0;
 		rg->AddGraphResource("backBuffer", info, true, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
 		info.format = VK_FORMAT_D24_UNORM_S8_UINT;

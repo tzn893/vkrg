@@ -4,12 +4,21 @@
 
 
 namespace vkrg {
-	
+
 	RenderPass::RenderPass(RenderGraph* graph, const char* name, RenderPassType type, RenderPassExtension expectedExtension)
 		: m_Graph(graph), name(name), m_RenderPassType(type), m_ExpectedExtension(expectedExtension)
 	{}
 
-	bool CheckAttachmentCompality(RenderPassExtension expectedExtension,ImageSlice range, ResourceInfo info)
+	bool CheckAttachmentCompality(ImageSlice range, ResourceInfo info)
+	{
+		if ((gvk::GetAllAspects(info.format) & range.aspectMask) != range.aspectMask) return false;
+
+		if (range.baseArrayLayer + range.layerCount > info.channelCount) return false;
+		if (range.baseMipLevel + range.levelCount > info.mipCount) return false;
+		return true;
+	}
+
+	bool CheckAttachmentCompality(RenderPassExtension expectedExtension, ImageSlice range, ResourceInfo info)
 	{
 		if (info.extType == ResourceExtensionType::Buffer) return false;
 
@@ -25,13 +34,8 @@ namespace vkrg {
 			return vkrg_fequal(expectedExtension.extension.screen.x, info.ext.screen.x) &&
 				vkrg_fequal(expectedExtension.extension.screen.y, info.ext.screen.y);
 		}
-		
-		
-		if ((gvk::GetAllAspects(info.format) & range.aspectMask) != range.aspectMask) return false;
 
-		if (range.baseArrayLayer + range.layerCount > info.channelCount) return false;
-		if (range.baseMipLevel + range.levelCount > info.mipCount) return false;
-		return true;
+		return CheckAttachmentCompality(range, info);
 	}
 
 	bool CheckAttachmentCompality(BufferSlice range, ResourceInfo info)
@@ -42,13 +46,13 @@ namespace vkrg {
 		return true;
 	}
 
-	bool CheckAttachmentViewCompality(ResourceInfo& info,ImageSlice slice, VkImageViewType type)
+	bool CheckAttachmentViewCompality(ResourceInfo& info, ImageSlice slice, VkImageViewType type)
 	{
 		if (info.IsBuffer()) return false;
 
 		bool onedCompatiable = info.extType != ResourceExtensionType::Screen && (info.ext.fixed.y <= 1) && (info.ext.fixed.z <= 1);
-		bool twoCompatiable = (info.extType == ResourceExtensionType::Screen || info.ext.fixed.z <= 1) ;
-		bool thirdCompatiable = (info.extType != ResourceExtensionType::Screen) ;
+		bool twoCompatiable = (info.extType == ResourceExtensionType::Screen || info.ext.fixed.z <= 1);
+		bool thirdCompatiable = (info.extType != ResourceExtensionType::Screen);
 		bool arrayCompatible = (slice.layerCount > 1);
 		bool cubeCompatible = (slice.layerCount == 6);
 
@@ -60,7 +64,7 @@ namespace vkrg {
 		{
 			return twoCompatiable && !arrayCompatible;
 		}
-		if (type == VK_IMAGE_VIEW_TYPE_3D) 
+		if (type == VK_IMAGE_VIEW_TYPE_3D)
 		{
 			return thirdCompatiable && !arrayCompatible;
 		}
@@ -99,7 +103,7 @@ namespace vkrg {
 		if (range.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT) return std::nullopt;
 
 		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
-			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType)) 
+			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
 			return std::nullopt;
 
 		RenderPassAttachment attachment;
@@ -136,7 +140,7 @@ namespace vkrg {
 
 		if ((range.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) == 0) return std::nullopt;
 		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
-			|| !CheckAttachmentViewCompality(resInfo, range, viewType)) 
+			|| !CheckAttachmentViewCompality(resInfo, range, viewType))
 			return std::nullopt;
 
 		RenderPassAttachment attachment;
@@ -152,6 +156,7 @@ namespace vkrg {
 		return attachment;
 	}
 
+	/*
 	opt<RenderPassAttachment> RenderPass::AddImageDepthInput(const char* name, ImageSlice range, VkImageViewType viewType)
 	{
 		ResourceHandle handle;
@@ -172,7 +177,7 @@ namespace vkrg {
 		ResourceInfo resInfo = m_Graph->GetResourceInfo(handle);
 
 		if ((range.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) == 0) return std::nullopt;
-		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
+		if (!CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))
 			|| !CheckAttachmentViewCompality(resInfo, range, viewType))
 			return std::nullopt;
 
@@ -188,7 +193,7 @@ namespace vkrg {
 
 		return attachment;
 	}
-
+	*/
 	opt<RenderPassAttachment> RenderPass::AddImageColorInput(const char* name, ImageSlice range, VkImageViewType    viewType)
 	{
 		ResourceHandle handle;
@@ -206,7 +211,7 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
-		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
+		if (!CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))
 			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
 			return std::nullopt;
 
@@ -240,7 +245,7 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
-		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
+		if (!CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))
 			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
 			return std::nullopt;
 
@@ -309,7 +314,7 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
-		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
+		if (!CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))
 			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
 			return std::nullopt;
 
@@ -343,7 +348,7 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
-		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
+		if (!CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))
 			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
 			return std::nullopt;
 
@@ -377,7 +382,7 @@ namespace vkrg {
 			return std::nullopt;
 		}
 
-		if (!CheckAttachmentCompality(m_ExpectedExtension, range, m_Graph->GetResourceInfo(handle))
+		if (!CheckAttachmentCompality(range, m_Graph->GetResourceInfo(handle))
 			|| !CheckAttachmentViewCompality(m_Graph->GetResourceInfo(handle), range, viewType))
 			return std::nullopt;
 
@@ -405,7 +410,7 @@ namespace vkrg {
 		{
 			return std::nullopt;
 		}
-		
+
 		if (m_RenderPassType != RenderPassType::Raytracing)
 		{
 			return std::nullopt;
@@ -604,7 +609,7 @@ namespace vkrg {
 		{
 			initGuess = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 		}
-		else if (idx.type == RenderPassAttachment::Type::ImageColorInput 
+		else if (idx.type == RenderPassAttachment::Type::ImageColorInput
 			|| idx.type == RenderPassAttachment::Type::ImageRTSampledInput)
 		{
 			initGuess = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -614,7 +619,7 @@ namespace vkrg {
 			initGuess = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		}
 		else if (idx.type == RenderPassAttachment::Type::ImageStorageOutput
-			||  idx.type == RenderPassAttachment::Type::ImageRTOutput)
+			|| idx.type == RenderPassAttachment::Type::ImageRTOutput)
 		{
 			initGuess = VK_IMAGE_LAYOUT_GENERAL;
 		}
@@ -622,7 +627,7 @@ namespace vkrg {
 		The image subresources for a storage image must be in the VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR or
 		VK_IMAGE_LAYOUT_GENERAL layout in order to access its data in a shader.
 		*/
-		else if (idx.type == RenderPassAttachment::Type::ImageStorageInput || 
+		else if (idx.type == RenderPassAttachment::Type::ImageStorageInput ||
 			idx.type == RenderPassAttachment::Type::ImageRTInput)
 		{
 			// initGuess = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
@@ -632,7 +637,7 @@ namespace vkrg {
 		{
 			initGuess = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		}
-	
+
 		m_RenderPassInterface->GetAttachmentExpectedState(idx.idx, initGuess);
 
 		return initGuess;
@@ -717,7 +722,7 @@ namespace vkrg {
 	{
 		return name.c_str();
 	}
-	
+
 	const std::vector<ResourceHandle>& RenderPass::GetAttachedResourceHandles()
 	{
 		return m_AttachmentResourceHandle;
@@ -748,7 +753,8 @@ namespace vkrg {
 
 	bool RenderPassAttachment::IsBuffer() const
 	{
-		return type == RenderPassAttachment::BufferInput || type == RenderPassAttachment::BufferStorageInput || type == RenderPassAttachment::BufferStorageOutput;
+		return type == RenderPassAttachment::BufferInput || type == RenderPassAttachment::BufferStorageInput || type == RenderPassAttachment::BufferStorageOutput
+			|| type == RenderPassAttachment::BufferRTInput || type == RenderPassAttachment::BufferRTOutput;
 	}
 
 	RenderPassType RenderPass::GetType()
@@ -771,7 +777,7 @@ namespace vkrg {
 
 		vkrg_assert(frameIdx < RenderGraph::maxFrameOnFlightCount);
 		vkrg_assert(attachment.targetPass == m_Graph->m_RenderPassList[m_passIdx].pass.get());
-		
+
 		auto view = m_Graph->m_RPViewTable[m_passIdx].attachmentViews[frameIdx][attachment.idx];
 		vkrg_assert(view.isImage);
 
@@ -791,6 +797,50 @@ namespace vkrg {
 		return view.bufferView;
 	}
 
+
+	ptr<gvk::Image> RenderPassRuntimeContext::GetImage(RenderPassAttachment attachment, uint32_t frameIdx /*= 0xffffffff*/)
+	{
+		if (frameIdx == 0xffffffff) frameIdx = m_FrameIdx;
+		if (m_Graph->m_Options.disableFrameOnFlight) frameIdx = 0;
+
+		vkrg_assert(frameIdx < RenderGraph::maxFrameOnFlightCount);
+		vkrg_assert(attachment.targetPass == m_Graph->m_RenderPassList[m_passIdx].pass.get());
+
+		ResourceHandle resource = m_Graph->m_RenderPassList[m_passIdx].pass->GetAttachedResourceHandles()[attachment.idx];
+		if (resource.external)
+		{
+			uint32_t externalIdx = m_Graph->m_LogicalResourceAssignmentTable[resource.idx].idx;
+			return m_Graph->m_ExternalResourceBindings[externalIdx].images[frameIdx];
+		}
+		else
+		{
+			uint32_t physicalIdx = m_Graph->m_LogicalResourceAssignmentTable[resource.idx].idx;
+			return m_Graph->m_PhysicalResourceBindings[physicalIdx].images[frameIdx];
+		}
+
+		return nullptr;
+	}
+
+	VkImageLayout RenderPassRuntimeContext::GetImageLayout(RenderPassAttachment attachment)
+	{
+		vkrg_assert(attachment.targetPass == m_Graph->m_RenderPassList[m_passIdx].pass.get());
+
+		return m_Graph->m_RenderPassList[m_passIdx].pass->GetAttachmentExpectedState(attachment);
+	}
+
+	VkImageSubresourceRange RenderPassRuntimeContext::GetImageViewRange(RenderPassAttachment attachment)
+	{
+		return attachment.range.imageRange;
+	}
+
+	VkExtent3D RenderPassRuntimeContext::GetImageExtent(RenderPassAttachment attachment, uint32_t mipLevel)
+	{
+		ResourceHandle resource = m_Graph->m_RenderPassList[m_passIdx].pass->GetAttachedResourceHandles()[attachment.idx];
+
+		ResourceInfo& info = m_Graph->m_LogicalResourceList[resource.idx].info;
+		auto [w, h, d] = m_Graph->GetExpectedExtension(info.ext, info.extType);
+		return VkExtent3D{ w >> mipLevel, h >> mipLevel ,d };
+	}
 
 	// TODO dirty flag for every view
 	bool RenderPassRuntimeContext::CheckAttachmentDirtyFlag(RenderPassAttachment attachment)

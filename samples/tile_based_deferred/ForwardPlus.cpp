@@ -313,7 +313,7 @@ public:
 			slice.layerCount = 1;
 			slice.levelCount = 1;
 
-			auto depthStencil = shadingHandle.pass->AddImageDepthInput("depthStencil", slice).value();
+			auto depthStencil = shadingHandle.pass->AddImageColorInput("depthStencil", slice, VK_IMAGE_VIEW_TYPE_2D).value();
 			auto lightIndex = shadingHandle.pass->AddBufferStorageInput("lightIndex", BufferSlice::fullBuffer).value();
 			auto lightGrid = shadingHandle.pass->AddBufferStorageInput("lightGrid", BufferSlice::fullBuffer).value();
 
